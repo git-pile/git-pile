@@ -10,3 +10,14 @@ class run_wrapper:
 
     def __call__(self, s, *args, **kwargs):
         run([self.cmd] + s.split(), *args, **kwargs)
+
+
+class subcmd:
+    names = []
+
+    def add(f):
+        subcmd.names.append(f.__name__)
+        return f
+
+    def list():
+        return subcmd.names
