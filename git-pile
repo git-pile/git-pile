@@ -1,0 +1,8 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: LGPL-2.1+
+
+import git_pile.git_pile as git_pile
+
+
+if __name__ == "__main__":
+    git_pile.main()

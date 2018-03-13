@@ -1,0 +1,28 @@
+# Emacs rope configuration
+.ropeproject
+.project
+.pydevproject
+.settings
+
+# pyenv version file
+.python-version
+
+# Python
+*.py[co]
+
+## Packages
+*.egg
+*.egg-info
+dist
+build
+eggs
+parts
+bin
+var
+sdist
+deb_dist
+develop-eggs
+.installed.cfg
+
+## Installer logs
+pip-log.txt
