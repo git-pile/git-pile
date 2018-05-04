@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+# PYTHON_ARGCOMPLETE_OK
+# SPDX-License-Identifier: LGPL-2.1+
+
+import git_pile.git_mbox_prepare as git_mbox_prepare
+
+
+if __name__ == "__main__":
+    git_mbox_prepare.main()

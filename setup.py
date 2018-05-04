@@ -15,7 +15,7 @@ setup(
     maintainer="git-pile contributors",
     maintainer_email="FIXME@lists.freedesktop.org",
     license="LGPLv2+",
-    scripts=["git-pile"],
+    scripts=["git-pile", "git-mbox-prepare"],
     classifiers=['Intended Audience :: Developers',
                  'License :: OSI Approved',
                  'Programming Language :: Python',
