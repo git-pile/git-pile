@@ -18,7 +18,7 @@ args = None
 
 class Patch:
     subject_regex = re.compile(
-        r"\[PATCH *(?P<version>v[0-9]*)? *(?P<number>[0-9]+/[0-9]*)? *\] (?P<title>.*)$",
+        r"\[PATCH *(?P<project>[\w-]*)? *(?P<version>v[0-9]*)? *(?P<number>[0-9]+/[0-9]*)? *\] (?P<title>.*)$",
         re.MULTILINE)
 
     def __init__(self, msg, match):
@@ -31,8 +31,8 @@ class Patch:
             self.number = 1
             self.total = 1
 
+        self.project = match.group("project")
         self.version = match.group("version")
-
         self.title = match.group("title").strip()
 
         # transliterate
