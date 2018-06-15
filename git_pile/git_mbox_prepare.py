@@ -40,8 +40,11 @@ class Patch:
             ord(" "): "-", ord(":"): "-", ord("/"): "-", ord("*"): "-",
             ord("("): "-", ord(")"): "-",
         })
-        # remove duplicates and append .patch
-        self.filename = re.sub(r"--+", r"-", self.filename) + ".patch"
+        # remove duplicates and dash in the end
+        self.filename = re.sub(r"--+", r"-", self.filename)
+        self.filename = self.filename.strip('-')
+
+        self.filename = self.filename + '.patch'
 
     def __str__(self):
         return self.title
