@@ -14,13 +14,11 @@ except ImportError:
     pass
 
 args = None
+subject_regex_str = r"\[PATCH *(?P<project>[\w-]*)? *(?P<version>v[0-9]*)? *(?P<number>[0-9]+/[0-9]*)? *\] (?P<title>.*)$"
+subject_regex = re.compile(subject_regex_str, re.MULTILINE)
 
 
 class Patch:
-    subject_regex = re.compile(
-        r"\[PATCH *(?P<project>[\w-]*)? *(?P<version>v[0-9]*)? *(?P<number>[0-9]+/[0-9]*)? *\] (?P<title>.*)$",
-        re.MULTILINE)
-
     def __init__(self, msg, match):
         self.msg = msg
 
@@ -50,10 +48,16 @@ class Patch:
         return self.title
 
     def parse(msg):
-        match = Patch.subject_regex.search(msg["subject"])
-        if not match:
-            return None
-        return Patch(msg, match)
+        match = subject_regex.search(msg["subject"])
+        if match:
+            return Patch(msg, match)
+        for alt in args.allow_prefixes:
+            alt_subject_str = subject_regex_str.replace("PATCH", alt)
+            match = re.search(alt_subject_str, msg["subject"], re.MULTILINE)
+            if match:
+                return Patch(msg, match)
+
+        return None
 
 
 def parse_args():
@@ -66,6 +70,11 @@ def parse_args():
         "-o", "--output", help="Directory in which to place final patches",
         metavar="DIR",
         default=".")
+    parser.add_argument(
+        "-p", "--allow-prefixes", help="Besides \"PATCH\" as prefix, allow any of the PREFIX to appear in the subject",
+        nargs='+',
+        metavar="PREFIX",
+        default=[])
 
     group = parser.add_argument_group("Required arguments")
     group.add_argument("mbox", help="mbox file to process", metavar="MBOX_FILE")
