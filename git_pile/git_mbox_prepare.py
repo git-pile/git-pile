@@ -2,6 +2,11 @@
 # SPDX-License-Identifier: LGPL-2.1+
 
 import argparse
+import mailbox
+import os
+import os.path
+import re
+import sys
 
 try:
     import argcomplete
@@ -9,6 +14,44 @@ except ImportError:
     pass
 
 args = None
+
+
+class Patch:
+    subject_regex = re.compile(
+        r"\[PATCH *(?P<version>v[0-9]*)? *(?P<number>[0-9]+/[0-9]*)? *\] (?P<title>.*)$",
+        re.MULTILINE)
+
+    def __init__(self, msg, match):
+        self.msg = msg
+
+        number = match.group("number")
+        if number:
+            self.number, self.total = (int(x) for x in number.strip().split('/'))
+        else:
+            self.number = 1
+            self.total = 1
+
+        self.version = match.group("version")
+
+        self.title = match.group("title").strip()
+
+        # transliterate
+        self.filename = self.title.translate({
+            ord(" "): "-",
+            ord(":"): "-",
+            ord("/"): "-",
+        })
+        # remove duplicates and append .patch
+        self.filename = re.sub(r"--+", r"-", self.filename) + ".patch"
+
+    def __str__(self):
+        return self.title
+
+    def parse(msg):
+        match = Patch.subject_regex.search(msg["subject"])
+        if not match:
+            return None
+        return Patch(msg, match)
 
 
 def parse_args():
@@ -19,10 +62,11 @@ def parse_args():
 
     parser.add_argument(
         "-o", "--output", help="Directory in which to place final patches",
-        metavar="DIR")
+        metavar="DIR",
+        default=".")
 
     group = parser.add_argument_group("Required arguments")
-    group.add_argument("mbox", help="mbox file to process", metavar="PATH")
+    group.add_argument("mbox", help="mbox file to process", metavar="MBOX_FILE")
 
     try:
         argcomplete.autocomplete(parser)
@@ -33,3 +77,61 @@ def parse_args():
 
 def main():
     parse_args()
+
+    box = mailbox.mbox(args.mbox)
+    if box is None or len(box) == 0:
+        print("No emails in mailbox '%s'?" % args.mbox)
+        return 1
+
+    patches = []
+    for msg in box:
+        p = Patch.parse(msg)
+        if not p:
+            print("Could not parse subject '%s'" % msg["subject"], file=sys.stderr)
+            return 1
+        patches.append(p)
+
+    # sanity checks
+    # 1) Total, if exists, is the same on all patches
+    total = patches[0].total
+    coverletter = None
+    for p in patches[1:]:
+        if p.total != total:
+            print("Patch '%s' has a different total %d" % (p.title, p.total), file=sys.stderr)
+            return 1
+
+    # 2) Only one coverletter
+    for p in patches:
+        if p.number == 0:
+            if coverletter:
+                print("Patch '%s' and '%s' are coverletters" %
+                      p.title, coverletter.title, file=sys.stderr)
+                return 1
+            coverletter = p
+
+    # 3) total == len(mbox) or total == len(mbox) - 1 when we have a coverletter
+    if total is not None:
+        x = total
+        if coverletter:
+            x = x + 1
+        if len(box) != x:
+            print("Number of patches don't match total: %d vs %d" % (len(box), x), file=sys.stderr)
+            return 1
+
+    if (len(patches) == 1):
+        patches_sorted = patches
+    else:
+        patches_sorted = sorted(patches, key=lambda p: p.number)
+
+    os.makedirs(args.output, exist_ok=True)
+
+    idx = 1
+    for p in patches_sorted:
+        if p == coverletter:
+            continue
+        fn = "%04d-%s" % (idx, p.filename)
+        fn = os.path.join(args.output, fn)
+        with open(fn, "w") as f:
+            f.write(p.msg.get_payload())
+        print(fn)
+        idx += 1
