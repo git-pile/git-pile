@@ -61,6 +61,58 @@ class Patch:
         return None
 
 
+class PatchSeries:
+    def __init__(self, patches):
+        self.patches = patches
+        self.total = None
+        self.coverletter = None
+
+    def sanitize(self):
+        return self._sanity_check_same_total() and \
+               self._sanity_check_one_coverletter() and \
+               self._sanity_check_len_ok()
+
+    # Total, if exists, is the same on all patches
+    def _sanity_check_same_total(self):
+        total = self.patches[0].total
+        for p in self.patches[1:]:
+            if p.total != total:
+                print("Patch '%s' has a different total %d" % (p.title, p.total), file=sys.stderr)
+                return False
+
+        self.total = total
+
+        return True
+
+    # There's only one coverletter
+    def _sanity_check_one_coverletter(self):
+        for p in self.patches:
+            if p.number == 0:
+                if self.coverletter:
+                    print("Patch '%s' and '%s' are coverletters" %
+                          p.title, self.coverletter.title, file=sys.stderr)
+                    return False
+                self.coverletter = p
+
+        return True
+
+    # total == len(mbox) or total == len(mbox) - 1 when we have a coverletter
+    def _sanity_check_len_ok(self):
+        if self.total is not None:
+            x = self.total
+            if self.coverletter:
+                x = x + 1
+            if len(self.patches) != x:
+                print("Number of patches don't match total: %d vs %d" % (len(self.patches), x), file=sys.stderr)
+                return False
+
+        return True
+
+    def sort(self):
+        if (len(self.patches) != 1):
+            self.patches = sorted(self.patches, key=lambda p: p.number)
+
+
 def parse_args():
     global args
 
@@ -103,43 +155,17 @@ def main():
             return 1
         patches.append(p)
 
-    # sanity checks
-    # 1) Total, if exists, is the same on all patches
-    total = patches[0].total
-    coverletter = None
-    for p in patches[1:]:
-        if p.total != total:
-            print("Patch '%s' has a different total %d" % (p.title, p.total), file=sys.stderr)
-            return 1
+    series = PatchSeries(patches)
+    if not series.sanitize():
+        return 1
 
-    # 2) Only one coverletter
-    for p in patches:
-        if p.number == 0:
-            if coverletter:
-                print("Patch '%s' and '%s' are coverletters" %
-                      p.title, coverletter.title, file=sys.stderr)
-                return 1
-            coverletter = p
-
-    # 3) total == len(mbox) or total == len(mbox) - 1 when we have a coverletter
-    if total is not None:
-        x = total
-        if coverletter:
-            x = x + 1
-        if len(box) != x:
-            print("Number of patches don't match total: %d vs %d" % (len(box), x), file=sys.stderr)
-            return 1
-
-    if (len(patches) == 1):
-        patches_sorted = patches
-    else:
-        patches_sorted = sorted(patches, key=lambda p: p.number)
+    series.sort()
 
     os.makedirs(args.output, exist_ok=True)
 
     idx = 1
-    for p in patches_sorted:
-        if p == coverletter:
+    for p in series.patches:
+        if p == series.coverletter:
             continue
         fn = "%04d-%s" % (idx, p.filename)
         fn = os.path.join(args.output, fn)
