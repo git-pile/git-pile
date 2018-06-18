@@ -7,4 +7,4 @@ import sys
 
 
 if __name__ == "__main__":
-    sys.exit(git_pile.main())
+    sys.exit(git_pile.main(*sys.argv[1:]))

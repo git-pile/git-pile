@@ -113,7 +113,7 @@ class PatchSeries:
             self.patches = sorted(self.patches, key=lambda p: p.number)
 
 
-def parse_args():
+def parse_args(cmd_args):
     global args
 
     parser = argparse.ArgumentParser(
@@ -136,11 +136,11 @@ def parse_args():
         argcomplete.autocomplete(parser)
     except NameError:
         pass
-    args = parser.parse_args()
+    args = parser.parse_args(cmd_args)
 
 
-def main():
-    parse_args()
+def main(*cmd_args):
+    parse_args(cmd_args)
 
     box = mailbox.mbox(args.mbox)
     if box is None or len(box) == 0:
@@ -173,3 +173,5 @@ def main():
             f.write(p.msg.get_payload())
         print(fn)
         idx += 1
+
+    return 0

@@ -33,7 +33,7 @@ def help():
     sys.exit(0)
 
 
-def parse_args():
+def parse_args(cmd_args):
     global arg_parser
 
     parser = argparse.ArgumentParser(
@@ -45,12 +45,14 @@ def parse_args():
         argcomplete.autocomplete(parser)
     except NameError:
         pass
-    args = parser.parse_args()
+    args = parser.parse_args(cmd_args)
     arg_parser = parser
 
     if args.action:
         globals()[args.action]()
 
 
-def main():
-    parse_args()
+def main(*cmd_args):
+    parse_args(cmd_args)
+
+    return 0
