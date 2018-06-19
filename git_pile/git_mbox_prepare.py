@@ -260,6 +260,11 @@ def main(*cmd_args):
         fn = "%04d-%s" % (idx, p.filename)
         fn = os.path.join(args.output, fn)
         with open(fn, "w") as f:
+            f.write("""From: %s
+Date: %s
+Subject: [PATCH] %s
+
+""" % (p.msg["from"], p.msg["date"], p.title))
             f.write(p.msg.get_payload())
         print(fn)
         idx += 1
