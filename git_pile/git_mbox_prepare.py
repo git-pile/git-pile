@@ -7,6 +7,9 @@ import os
 import os.path
 import re
 import sys
+import tempfile
+
+from .helpers import run_wrapper
 
 try:
     import argcomplete
@@ -16,7 +19,7 @@ except ImportError:
 args = None
 subject_regex_str = r"\[PATCH *(?P<project>[\w-]*)? *(?P<version>v[0-9]*)? *(?P<number>[0-9]+/[0-9]*)? *\] (?P<title>.*)$"
 subject_regex = re.compile(subject_regex_str, re.MULTILINE)
-
+editor = run_wrapper("EDITOR", "vim")
 
 class Patch:
     def __init__(self, msg, match):
@@ -68,35 +71,45 @@ class PatchSeries:
         self.coverletter = None
 
     def sanitize(self):
-        return self._sanity_check_same_total() and \
-               self._sanity_check_one_coverletter() and \
-               self._sanity_check_len_ok()
+        checks = [
+            self._sanity_check_same_total,
+            self._sanity_check_one_coverletter,
+            self._sanity_check_len_ok
+        ]
+
+        for c in checks:
+            ok, should_retry = c()
+            if not ok:
+                return (False, should_retry)
+
+        return (True, True)
 
     # Total, if exists, is the same on all patches
+    # Return a tuple (pass, should_retry)
     def _sanity_check_same_total(self):
         total = self.patches[0].total
         for p in self.patches[1:]:
             if p.total != total:
-                print("Patch '%s' has a different total %d" % (p.title, p.total), file=sys.stderr)
-                return False
+                return (False, self._fixup_all_subjects("Patch '%s' has a different total %d" % (p.title, p.total)))
 
         self.total = total
 
-        return True
+        return (True, True)
 
     # There's only one coverletter
+    # Return a tuple (pass, should_retry)
     def _sanity_check_one_coverletter(self):
         for p in self.patches:
             if p.number == 0:
                 if self.coverletter:
-                    print("Patch '%s' and '%s' are coverletters" %
-                          p.title, self.coverletter.title, file=sys.stderr)
-                    return False
+                    return (False, self._fixup_all_subjects("Patch '%s' and '%s' are coverletters" % (p.title, self.coverletter.title)))
+
                 self.coverletter = p
 
-        return True
+        return (True, True)
 
     # total == len(mbox) or total == len(mbox) - 1 when we have a coverletter
+    # Return a tuple (pass, should_retry)
     def _sanity_check_len_ok(self):
         if self.total is not None:
             x = self.total
@@ -104,9 +117,77 @@ class PatchSeries:
                 x = x + 1
             if len(self.patches) != x:
                 print("Number of patches don't match total: %d vs %d" % (len(self.patches), x), file=sys.stderr)
+                return (False, False)
+
+        return (True, True)
+
+    def _fixup_all_subjects(self, errmsg):
+        print(errmsg, file=sys.stderr)
+        if not args.interactive:
+            return False
+
+        try:
+            subjects = []
+            f = tempfile.NamedTemporaryFile("w+")
+            f.write("""#
+# Error:
+#
+# %s
+#
+# These are the subjects from the patches in %s in the order they were received
+
+""" % (errmsg, args.mbox))
+            for p in self.patches:
+                # we want the real subject from the email to fix it up
+                s = p.msg["subject"].strip().translate({ord("\n"): None})
+                f.write("\n# (%d/%d) %s\n" % (p.number, p.total, p.title))
+                f.write(s)
+                subjects.append(s)
+            f.flush()
+            editor(f.name)
+
+            # now read it back and compare subjects
+            f.seek(0)
+            idx = 0
+            changed = False
+            for l in f:
+                s = l.strip("\n").strip()
+                if not s or s.startswith("#"):
+                    continue
+
+                if idx >= len(subjects):
+                    # we would add a new patch... force aborting below
+                    idx += 1
+                    break
+
+                if subjects[idx] != s:
+                    changed = True
+                    subjects[idx] = s
+                idx += 1
+
+            if idx != len(subjects):
+                print("\nAborting: new number of patches doesn't match previous",
+                      file=sys.stderr)
+                return False
+            if not changed:
+                print("\nAborting: subjects kept the same",
+                      file=sys.stderr)
                 return False
 
-        return True
+            idx = 0
+            for p in self.patches:
+                del p.msg["subject"]
+                p.msg["subject"] = subjects[idx]
+                idx += 1
+
+            patches = [Patch.parse(p.msg) for p in self.patches]
+            self.patches = patches
+
+            return True
+        finally:
+            f.close()
+
+        return False
 
     def sort(self):
         if (len(self.patches) != 1):
@@ -128,6 +209,9 @@ def parse_args(cmd_args):
         nargs='+',
         metavar="PREFIX",
         default=[])
+    parser.add_argument(
+        "-i", "--interactive", help="Allow to interactively fixup patch subjects if mbox-prepare is not able to parse",
+        action="store_true")
 
     group = parser.add_argument_group("Required arguments")
     group.add_argument("mbox", help="mbox file to process", metavar="MBOX_FILE")
@@ -155,9 +239,15 @@ def main(*cmd_args):
             return 1
         patches.append(p)
 
+    retry = True
     series = PatchSeries(patches)
-    if not series.sanitize():
-        return 1
+
+    while retry:
+        ok, retry = series.sanitize()
+        if ok:
+            retry = False
+        elif not retry:
+            return 1
 
     series.sort()
 
