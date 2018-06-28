@@ -3,11 +3,11 @@
 
 import os
 
-from subprocess import run
+import subprocess
 
 
 class run_wrapper:
-    def __init__(self, cmd, env_default=None):
+    def __init__(self, cmd, env_default=None, capture=False):
         """
         Wrap @cmd into a cmd() function. If env_default is not None,
         cmd is considered to be an environment variable and if it's
@@ -20,9 +20,16 @@ class run_wrapper:
             val = cmd
 
         self.cmd = val
+        self.capture = capture
 
     def __call__(self, s, *args, **kwargs):
-        run([self.cmd] + s.split(), *args, **kwargs)
+        if self.capture:
+            if "stdout" not in kwargs:
+                kwargs["stdout"] = subprocess.PIPE
+            if "encoding" not in kwargs:
+                kwargs["encoding"] = "utf-8"
+
+        return subprocess.run([self.cmd] + s.split(), *args, **kwargs)
 
 
 class subcmd:
