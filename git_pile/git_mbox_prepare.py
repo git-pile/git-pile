@@ -21,6 +21,7 @@ subject_regex_str = r"\[PATCH *(?P<project>[\w-]*)? *(?P<version>v[0-9]*)? *(?P<
 subject_regex = re.compile(subject_regex_str, re.MULTILINE)
 editor = run_wrapper("EDITOR", "vim")
 
+
 class Patch:
     def __init__(self, msg, match):
         self.msg = msg
