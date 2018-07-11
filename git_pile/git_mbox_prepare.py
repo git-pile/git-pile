@@ -17,8 +17,8 @@ except ImportError:
     pass
 
 args = None
-subject_regex_str = r"\[PATCH *(?P<project>[\w-]*)? *(?P<version>v[0-9]*)? *(?P<number>[0-9]+/[0-9]*)? *\] (?P<title>.*)$"
-subject_regex = re.compile(subject_regex_str, re.MULTILINE)
+subject_regex_str = r"\[PATCH *(?P<project>[\w-]*)? *(?P<version>v[0-9]*)? *(?P<number>[0-9]+/[0-9]*)? *\] (?P<title>.*)"
+subject_regex = re.compile(subject_regex_str)
 editor = run_wrapper("EDITOR", "vim")
 
 
@@ -53,12 +53,13 @@ class Patch:
         return self.title
 
     def parse(msg):
-        match = subject_regex.search(msg["subject"])
+        subject = msg["subject"].replace("\n", "")
+        match = subject_regex.search(subject)
         if match:
             return Patch(msg, match)
         for alt in args.allow_prefixes:
             alt_subject_str = subject_regex_str.replace("PATCH", alt)
-            match = re.search(alt_subject_str, msg["subject"], re.MULTILINE)
+            match = re.search(alt_subject_str, subject)
             if match:
                 return Patch(msg, match)
 
