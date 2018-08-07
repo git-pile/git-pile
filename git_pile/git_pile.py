@@ -44,10 +44,10 @@ def cmd_init(args):
 def parse_args(cmd_args):
     parser = argparse.ArgumentParser(
         description="Manage a pile of patches on top of git branches")
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(title="Commands", dest="command")
 
     # init
-    parser_init = subparsers.add_parser('init')
+    parser_init = subparsers.add_parser('init', help="Initialize configuration of git-pile in this repository")
     parser_init.add_argument(
         "-d", "--dir",
         help="Directory in which to place patches (default: %(default)s)",
