@@ -23,7 +23,7 @@ class Config:
     def is_valid(self):
         return self.dir != '' and self.branch != ''
 
-def init(args):
+def cmd_init(args):
     # TODO: check if already initialized
     # TODO: check if arguments make sense
     git("config pile.dir %s" % args.dir)
@@ -63,7 +63,7 @@ def parse_args(cmd_args):
         help="Remote branch to which patches will be pushed (default: empty - configure it later with `git config pile.remote`)",
         metavar="REMOTE",
         default="")
-    parser_init.set_defaults(func=init)
+    parser_init.set_defaults(func=cmd_init)
 
     try:
         argcomplete.autocomplete(parser)
