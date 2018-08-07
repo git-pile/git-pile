@@ -7,7 +7,7 @@ import subprocess
 
 
 class run_wrapper:
-    def __init__(self, cmd, env_default=None, capture=False):
+    def __init__(self, cmd, env_default=None, capture=False, check=True):
         """
         Wrap @cmd into a cmd() function. If env_default is not None,
         cmd is considered to be an environment variable and if it's
@@ -21,6 +21,7 @@ class run_wrapper:
 
         self.cmd = val
         self.capture = capture
+        self.check = check
 
     def __call__(self, s, *args, **kwargs):
         if self.capture:
@@ -28,6 +29,8 @@ class run_wrapper:
                 kwargs["stdout"] = subprocess.PIPE
             if "encoding" not in kwargs:
                 kwargs["encoding"] = "utf-8"
+
+        kwargs["check"] = kwargs.get("check", self.check)
 
         return subprocess.run([self.cmd] + s.split(), *args, **kwargs)
 
