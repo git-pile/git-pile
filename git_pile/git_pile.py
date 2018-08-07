@@ -75,6 +75,10 @@ def parse_args(cmd_args):
         pass
 
     args = parser.parse_args(cmd_args)
+    if not hasattr(args, "func"):
+        parser.print_help()
+        return None
+
     arg_parser = parser
 
     return args
@@ -82,4 +86,7 @@ def parse_args(cmd_args):
 
 def main(*cmd_args):
     args = parse_args(cmd_args)
+    if not args:
+        return 1
+
     return args.func(args)
