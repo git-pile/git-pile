@@ -13,8 +13,6 @@ from .helpers import run_wrapper
 # external commands
 git = run_wrapper('git', capture=True)
 
-arg_parser = None
-
 
 class Config:
     def __init__(self):
@@ -44,8 +42,6 @@ def init(args):
 
 
 def parse_args(cmd_args):
-    global arg_parser, args
-
     parser = argparse.ArgumentParser(
         description="Manage a pile of patches on top of git branches")
     subparsers = parser.add_subparsers()
@@ -78,8 +74,6 @@ def parse_args(cmd_args):
     if not hasattr(args, "func"):
         parser.print_help()
         return None
-
-    arg_parser = parser
 
     return args
 
