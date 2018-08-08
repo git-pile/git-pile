@@ -16,9 +16,16 @@ git = run_wrapper('git', capture=True)
 
 class Config:
     def __init__(self):
-        self.dir = git("config --get pile.dir").stdout.strip()
-        self.branch = git("config --get pile.branch").stdout.strip()
-        self.remote_branch = git("config --get pile.remote-branch").stdout.strip()
+        self.dir = ""
+        self.branch = ""
+        self.remote_branch = ""
+
+        s = git(["config", "--get-regex", "pile\\.*"]).stdout.strip()
+        for kv in s.split('\n'):
+            key, value = kv.strip().split()
+            # pile.*
+            key = key[5:].replace('-', '_')
+            setattr(self, key, value)
 
     def is_valid(self):
         return self.dir != '' and self.branch != ''
