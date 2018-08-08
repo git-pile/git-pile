@@ -24,7 +24,9 @@ class run_wrapper:
         self.check = check
 
     def __call__(self, s, *args, **kwargs):
-        if self.capture:
+        capture = kwargs.pop("capture", self.capture)
+
+        if capture:
             if "stdout" not in kwargs:
                 kwargs["stdout"] = subprocess.PIPE
             if "encoding" not in kwargs:
