@@ -83,6 +83,14 @@ def cmd_init(args):
 
     return 0
 
+# Temporary command to help with development
+def cmd_destroy(args):
+    config = Config()
+
+    git_ = run_wrapper('git', capture=True, check=False, print_error_as_ignored=True)
+    git_("worktree remove %s" % config.dir)
+    git_("branch -D %s" % config.pile_branch)
+
 
 def parse_args(cmd_args):
     parser = argparse.ArgumentParser(
@@ -117,6 +125,10 @@ def parse_args(cmd_args):
         metavar="REMOTE",
         default="")
     parser_init.set_defaults(func=cmd_init)
+
+    # destroy
+    parser_destroy = subparsers.add_parser('destroy', help="Destroy all git-pile on this repo")
+    parser_destroy.set_defaults(func=cmd_destroy)
 
     try:
         argcomplete.autocomplete(parser)
