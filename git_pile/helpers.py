@@ -34,7 +34,12 @@ class run_wrapper:
 
         kwargs["check"] = kwargs.get("check", self.check)
 
-        return subprocess.run([self.cmd] + s.split(), *args, **kwargs)
+        if isinstance(s, str):
+            l = s.split()
+        else:
+            l = s
+
+        return subprocess.run([self.cmd] + l, *args, **kwargs)
 
 
 class subcmd:
