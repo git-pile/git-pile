@@ -19,6 +19,7 @@ class Config:
         self.dir = ""
         self.branch = ""
         self.remote_branch = ""
+        self.tracking_branch = ""
 
         s = git(["config", "--get-regex", "pile\\.*"]).stdout.strip()
         for kv in s.split('\n'):
@@ -35,14 +36,15 @@ def cmd_init(args):
     # TODO: check if arguments make sense
     git("config pile.dir %s" % args.dir)
     git("config pile.branch %s" % args.branch)
+    git("config pile.tracking-branch %s" % args.tracking_branch)
     if args.remote_branch:
         git("config pile.remote-branch=%s" % args.remote_branch)
 
     config = Config()
 
     # TODO: remove prints
-    print("dir=%s\nbranch=%s\nremote-branch=%s" %
-          (config.dir, config.branch, config.remote_branch))
+    print("dir=%s\nbranch=%s\nremote-branch=%s\ntracking-branch=%s\n" %
+          (config.dir, config.branch, config.remote_branch, config.tracking_branch))
     print("is-valid=%s" % config.is_valid())
 
     return 0
@@ -70,6 +72,11 @@ def parse_args(cmd_args):
         help="Remote branch to which patches will be pushed (default: empty - configure it later with `git config pile.remote`)",
         metavar="REMOTE",
         default="")
+    parser_init.add_argument(
+        "-t", "--tracking-branch",
+        help="Base remote or local branch on top of which the patches from BRANCH should be applied (default: %(default)s)",
+        metavar="TRACKING_BRANCH",
+        default="master")
     parser_init.set_defaults(func=cmd_init)
 
     try:
