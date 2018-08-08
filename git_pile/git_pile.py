@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: LGPL-2.1+
 
 import argparse
+import os
+import os.path as op
+import tempfile
 
 try:
     import argcomplete
@@ -12,6 +15,8 @@ from .helpers import run_wrapper
 
 # external commands
 git = run_wrapper('git', capture=True)
+
+nul_f = open(os.devnull, 'w')
 
 
 class Config:
@@ -31,6 +36,11 @@ class Config:
     def is_valid(self):
         return self.dir != '' and self.branch != ''
 
+
+def git_branch_exists(branch):
+    return git("show-ref --verify --quiet refs/heads/%s" % branch, check=False).returncode == 0
+
+
 def cmd_init(args):
     # TODO: check if already initialized
     # TODO: check if arguments make sense
@@ -46,6 +56,26 @@ def cmd_init(args):
     print("dir=%s\nbranch=%s\nremote-branch=%s\ntracking-branch=%s\n" %
           (config.dir, config.branch, config.remote_branch, config.tracking_branch))
     print("is-valid=%s" % config.is_valid())
+
+    if not git_branch_exists(config.branch):
+        # Create and checkout an orphan branch named `config.branch` at the
+        # `config.dir` location. Unfortunately git-branch can't do that;
+        # git-checkout has a --orphan option, but that would necessarily
+        # checkout the branch and the user would be left wondering what
+        # happened if any command here on fails.
+        #
+        # Workaround is to do that ourselves with a temporary repository
+        with tempfile.TemporaryDirectory() as d:
+            git("-C %s init" % d)
+            with open(op.join(d, "config"), "w") as f:
+                rev = git("rev-parse %s" % config.tracking_branch).stdout.strip()
+                f.write("BASELINE=%s" % rev)
+            git("-C %s add -A" % d)
+            git(["-C", d, "commit", "-m", "Initial git-pile configuration"])
+
+            # Temporary repository created, now let's fetch and create our branch
+            git("fetch %s master:%s" % (d, config.branch), stdout=nul_f, stderr=nul_f)
+            git("worktree add --checkout %s %s" % (config.branch, config.dir), stdout=nul_f, stderr=nul_f)
 
     return 0
 
