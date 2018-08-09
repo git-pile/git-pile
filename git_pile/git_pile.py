@@ -156,7 +156,12 @@ def cmd_genpatches(args):
     # 3) Do not number the files: numbers will change when patches are added/removed
     # 4) To avoid filename clashes due to (3), check for each patch if a file
     #    already exists and workaround it
-    commit_list = git("rev-list --reverse %s..%s" % (config.tracking_branch, config.branch)).stdout.strip().split('\n')
+    if args.commit_range != "":
+        commit_range = args.commit_range
+    else:
+        commit_range = "%s..%s" % (config.tracking_branch, config.branch)
+
+    commit_list = git("rev-list --reverse %s" % commit_range).stdout.strip().split('\n')
 
     # Do everything in a temporary directory and once we know it went ok, move
     # to the final destination - we can use os.rename() since we are creating
@@ -252,6 +257,12 @@ def parse_args(cmd_args):
         help="Force use of OUTPUT_DIR even if it has patches. The existent patches will be removed.",
         action="store_true",
         default=False)
+    parser_genpatches.add_argument(
+        "commit_range",
+        help="Commit range to use for the generated patches (default: TRACKING_BRANCH..BRANCH)",
+        metavar="COMMIT_RANGE",
+        nargs="?",
+        default="")
     parser_genpatches.set_defaults(func=cmd_genpatches)
 
     # destroy
