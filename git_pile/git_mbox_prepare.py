@@ -199,8 +199,24 @@ class PatchSeries:
 def parse_args(cmd_args):
     global args
 
+    desc = """Prepare mbox to be used by git/git-pile - improved version over GIT-MAILSPLIT(1).
+Given a .mbox file, split it in separate .patch files like git-mailsplit, but also
+try hard to understand the "Subject" of the patch as been produced by
+git-format-patch and then generate patch files named and formated
+similarly to the ones produced by such tool.
+
+Another difference is that git-mailsplit basically splits a mbox
+keeping whatever order the patches were saved in the .mbox. Since
+it doesn't parse the subject, very often the patches 0001, 0002, etc that
+it produces won't correspond to the patches 1, 2 and so on.
+
+Since patches are sent by humans who may be a little creative on formatting
+it, git-mbox-prepare has also an "interactive" mode, in which the person
+applying the patch can guide it through getting the right order."""
+
     parser = argparse.ArgumentParser(
-        description="Prepare a mbox for use by git - improved version over GIT-MAILSPLIT(1)")
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=desc)
 
     parser.add_argument(
         "-o", "--output", help="Directory in which to place final patches",
