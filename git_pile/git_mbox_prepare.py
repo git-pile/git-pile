@@ -41,7 +41,7 @@ class Patch:
         self.filename = self.title.translate({
             ord(" "): "-", ord(":"): "-", ord("/"): "-", ord("*"): "-",
             ord("("): "-", ord(")"): "-", ord("+"): "-", ord("["): "-",
-            ord("]"): "-", ord(","): "-", ord("."): "-"
+            ord("]"): "-", ord(","): "-", ord("."): "-", ord("#"): "-",
         })
         # remove duplicates and dash in the end
         self.filename = re.sub(r"--+", r"-", self.filename)
