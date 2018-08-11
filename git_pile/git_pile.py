@@ -32,10 +32,9 @@ def error(s):
 class Config:
     def __init__(self):
         self.dir = ""
-        self.branch = ""
+        self.result_branch = ""
         self.pile_branch = ""
-        self.remote_branch = ""
-        self.tracking_branch = ""
+        self.base_branch = ""
 
         s = git(["config", "--get-regex", "pile\\.*"]).stdout.strip()
         for kv in s.split('\n'):
@@ -45,7 +44,7 @@ class Config:
             setattr(self, key, value)
 
     def is_valid(self):
-        return self.dir != '' and self.branch != '' and self.pile_branch != ''
+        return self.dir != '' and self.result_branch != '' and self.pile_branch != ''
 
     def check_is_valid(self):
         if not self.is_valid():
@@ -64,17 +63,15 @@ def cmd_init(args):
     # TODO: check if arguments make sense
     git("config pile.dir %s" % args.dir)
     git("config pile.pile-branch %s" % args.pile_branch)
-    git("config pile.branch %s" % args.branch)
-    git("config pile.tracking-branch %s" % args.tracking_branch)
-    if args.remote_branch:
-        git("config pile.remote-branch=%s" % args.remote_branch)
+    git("config pile.base-branch %s" % args.base_branch)
+    git("config pile.result-branch %s" % args.result_branch)
 
     config = Config()
 
     # TODO: remove prints
-    print("dir=%s\npile-branch=%s\nremote-branch=%s\ntracking-branch=%s\nbranch=%s" %
-          (config.dir, config.pile_branch, config.remote_branch, config.tracking_branch,
-           config.branch))
+    print("dir=%s\npile-branch=%s\nbase-branch=%s\nresult-branch=%s" %
+          (config.dir, config.pile_branch, config.base_branch,
+           config.result_branch))
     print("is-valid=%s" % config.is_valid())
 
     if not git_branch_exists(config.pile_branch):
@@ -88,7 +85,7 @@ def cmd_init(args):
         with tempfile.TemporaryDirectory() as d:
             git("-C %s init" % d)
             with open(op.join(d, "config"), "w") as f:
-                rev = git("rev-parse %s" % config.tracking_branch).stdout.strip()
+                rev = git("rev-parse %s" % config.base_branch).stdout.strip()
                 f.write("BASELINE=%s" % rev)
             git("-C %s add -A" % d)
             git(["-C", d, "commit", "-m", "Initial git-pile configuration"])
@@ -159,7 +156,7 @@ def cmd_genpatches(args):
     if args.commit_range != "":
         commit_range = args.commit_range
     else:
-        commit_range = "%s..%s" % (config.tracking_branch, config.branch)
+        commit_range = "%s..%s" % (config.base_branch, config.result_branch)
 
     commit_list = git("rev-list --reverse %s" % commit_range).stdout.strip().split('\n')
 
@@ -229,24 +226,19 @@ def parse_args(cmd_args):
         metavar="PILE_BRANCH",
         default="pile")
     parser_init.add_argument(
-        "-t", "--tracking-branch",
+        "-b", "--base-branch",
         help="Base remote or local branch on top of which the patches from PILE_BRANCH should be applied (default: %(default)s)",
-        metavar="TRACKING_BRANCH",
+        metavar="BASE_BRANCH",
         default="master")
     parser_init.add_argument(
-        "-b", "--branch",
-        help="Branch to be created when applying patches from PILE_BRANCH on top of TRACKING_BRANCH (default: %(default)s",
-        metavar="BRANCH",
+        "-r", "--result-branch",
+        help="Branch to be created when applying patches from PILE_BRANCH on top of BASE_BRANCH (default: %(default)s",
+        metavar="RESULT_BRANCH",
         default="internal")
-    parser_init.add_argument(
-        "-r", "--remote-branch",
-        help="TODO: Remote branch to which patches will be pushed (default: empty - configure it later with `git config pile.remote`)",
-        metavar="REMOTE",
-        default="")
     parser_init.set_defaults(func=cmd_init)
 
     # genpatches
-    parser_genpatches = subparsers.add_parser('genpatches', help="Generate patches from TRACKING_BRANCH..BRANCH and save to output directory")
+    parser_genpatches = subparsers.add_parser('genpatches', help="Generate patches from BASE_BRANCH..RESULT_BRANCH and save to output directory")
     parser_genpatches.add_argument(
         "-o", "--output-directory",
         help="Use OUTPUT_DIR to store the resulting files instead of the DIR from the configuration. This must be an empty/non-existent directory unless -f/--force is also used",
@@ -259,7 +251,7 @@ def parse_args(cmd_args):
         default=False)
     parser_genpatches.add_argument(
         "commit_range",
-        help="Commit range to use for the generated patches (default: TRACKING_BRANCH..BRANCH)",
+        help="Commit range to use for the generated patches (default: BASE_BRANCH..RESULT_BRANCH)",
         metavar="COMMIT_RANGE",
         nargs="?",
         default="")
