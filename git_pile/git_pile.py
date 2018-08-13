@@ -209,8 +209,58 @@ def cmd_destroy(args):
 
 
 def parse_args(cmd_args):
+    desc = """Manage a pile of patches on top of a git branch
+
+git-pile helps to manage a long running and always changing list of patches on
+top of git branch. It is similar to quilt, but aims to retain the git work flow
+exporting the final result as a branch.
+
+There are 3 important branches to understand how to use git-pile:
+
+    BASE_BRANCH: where patches will be applied on top of.
+    RESULT_BRANCH: the result of applying the patches on BASE_BRANCH
+    PILE_BRANCH: where to keep the patches and track their history
+
+This is a typical scenario git-pile is used in which BASE_BRANCH is "master"
+and RESULT_BRANCH is "internal".
+
+A---B---C master
+         \\
+          X---Y---Z internal
+
+PILE_BRANCH is a branch containing this file hierarchy based on the above
+example:
+
+series  config  X.patch  Y.patch  Z.patch
+
+The "series" and "config" file are there to allow git-pile to do its job
+and are retained for compatibility with quilt and qf. git-pile exposes
+commands to convert between RESULT_BRANCH and the files on PILE_BRANCH.
+This allows to save the history of the patches when BASE_BRANCH changes
+or patches are added, modified or removed on RESULT_BRANCH. Below is an
+example in which the BASE_BRANCH evolves adding more commits:
+
+A---B---C---D---E master
+         \\
+          X---Y---Z internal
+
+After a rebase of the RESULT_BRANCH we will have the following state, in
+which X', Y' and Z' denote the rebased patches. They may have possibly
+changed to solve conflicts or to apply cleanly:
+
+A---B---C---D---E master
+                 \\
+                  X'---Y'---Z' internal
+
+In turn, PILE_BRANCH will store the saved result:
+
+series  config  X'.patch  Y'.patch  Z'.patch
+"""
+
     parser = argparse.ArgumentParser(
-        description="Manage a pile of patches on top of git branches")
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=desc)
+
     subparsers = parser.add_subparsers(title="Commands", dest="command")
 
     # init
