@@ -167,7 +167,7 @@ def cmd_genpatches(args):
         staging = op.join(d, "staging")
         series = []
         for c in commit_list:
-            path_orig = git(["format-patch", "--signature= ", "-o", staging, "-N", "-1", c]).stdout.strip()
+            path_orig = git(["format-patch", "--zero-commit", "--signature= ", "-o", staging, "-N", "-1", c]).stdout.strip()
             path = fix_duplicate_patch_name(d, path_orig, len(commit_list))
             os.rename(path_orig, path)
             series.append(path)
