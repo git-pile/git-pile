@@ -92,7 +92,7 @@ def cmd_init(args):
 
             # Temporary repository created, now let's fetch and create our branch
             git("fetch %s master:%s" % (d, config.pile_branch), stdout=nul_f, stderr=nul_f)
-            git("worktree add --checkout %s %s" % (config.pile_branch, config.dir),
+            git("worktree add --checkout %s %s" % (config.dir, config.pile_branch),
                 stdout=nul_f, stderr=nul_f)
 
     return 0
