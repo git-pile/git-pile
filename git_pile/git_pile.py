@@ -212,6 +212,8 @@ def cmd_genpatches(args):
             f.write(op.basename(s))
             f.write("\n")
 
+    update_baseline(output, base)
+
     return 0
 
 
