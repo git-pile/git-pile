@@ -8,6 +8,8 @@ import shutil
 import sys
 import tempfile
 
+from contextlib import contextmanager
+
 try:
     import argcomplete
 except ImportError:
@@ -58,10 +60,47 @@ def git_branch_exists(branch):
     return git("show-ref --verify --quiet refs/heads/%s" % branch, check=False).returncode == 0
 
 
+def git_root():
+    return git("rev-parse --show-toplevel").stdout.strip("\n")
+
+
+def git_worktree_get_checkout_path(root, branch):
+    state = dict()
+    out = git("-C %s worktree list --porcelain" % root).stdout.split("\n")
+
+    for l in out:
+        if not l:
+            # end block
+            if state.get("branch", None) == "refs/heads/" + branch:
+                return state["worktree"]
+
+            state = dict()
+            continue
+
+        v = l.split(" ")
+        state[v[0]] = v[1] if len(v) > 1 else None
+
+
 def update_baseline(d, commit):
     with open(op.join(d, "config"), "w") as f:
         rev = git("rev-parse %s" % commit).stdout.strip()
         f.write("BASELINE=%s" % rev)
+
+
+# Create a temporary directory to checkout a detached branch with git-worktree
+# making sure it gets deleted (both the directory and from git-worktree) when
+# we finished using it.
+#
+# To be used in `with` context handling.
+@contextmanager
+def temporary_worktree(commit, dir=git_root(), prefix=".git-pile-worktree"):
+    try:
+        with tempfile.TemporaryDirectory(dir=dir, prefix=prefix) as d:
+            git("worktree add --detach --checkout %s %s" % (d, commit),
+                stdout=nul_f, stderr=nul_f)
+            yield d
+    finally:
+        git("worktree remove %s" % d)
 
 
 def cmd_init(args):
@@ -217,6 +256,63 @@ def cmd_genpatches(args):
     return 0
 
 
+def cmd_genbranch(args):
+    config = Config()
+    if not config.check_is_valid():
+        return 1
+
+    baseline = None
+    branch = args.branch if args.branch else config.result_branch
+    root = git_root()
+
+    with open(op.join(config.dir, "config"), "r") as f:
+        for l in f:
+            if l.startswith("BASELINE="):
+                baseline = l[9:].strip()
+                break
+
+    new_baseline = git("-C %s rev-parse %s" % (root, config.base_branch)).stdout.strip()
+    if baseline != new_baseline:
+        print("Applying patches from different baseline %s (saved) to %s (%s)" %
+              (baseline, new_baseline, config.base_branch),
+              file=sys.stderr)
+
+    patches = []
+    with open(op.join(config.dir, "series"), "r") as f:
+        for l in f:
+            l = l.strip()
+            if not l or l.startswith("#"):
+                continue
+
+            p = op.join(config.dir, l)
+            if not op.isfile(p):
+                fatal("series file reference '%s', but it doesn't exist" % p)
+
+            patches.append(p)
+
+    # work in a separate directory to avoid cluttering whatever the user is doing
+    # on the main one
+    with temporary_worktree(config.base_branch) as d:
+        for p in patches:
+            if args.verbose:
+                print(p)
+            git("-C %s am %s" % (d, op.join(root, p)))
+
+        # always save HEAD to PILE_RESULT_HEAD
+        shutil.copyfile(op.join(root, ".git", "worktrees", op.basename(d), "HEAD"),
+                        op.join(root, ".git", "PILE_RESULT_HEAD"))
+
+        path = git_worktree_get_checkout_path(root, branch)
+        if path:
+            error("final result is PILE_RESULT_HEAD but branch '%s' could not be updated to it "
+                  "because it is checked out at '%s'" % (branch, path))
+            return 1
+
+        git("-C %s checkout -B %s HEAD" % (d, branch), stdout=nul_f, stderr=nul_f)
+
+    return 0
+
+
 # Temporary command to help with development
 def cmd_destroy(args):
     config = Config()
@@ -324,6 +420,19 @@ series  config  X'.patch  Y'.patch  Z'.patch
         nargs="?",
         default="")
     parser_genpatches.set_defaults(func=cmd_genpatches)
+
+    # genbranch
+    parser_genbranch = subparsers.add_parser('genbranch', help="Generate RESULT_BRANCH by applying patches from PILE_BRANCH on top of BASE_BRANCH")
+    parser_genbranch.add_argument(
+        "-b", "--branch",
+        help="Use BRANCH to store the final result instead of RESULT_BRANCH",
+        metavar="BRANCH",
+        default="")
+    parser_genbranch.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        default=False)
+    parser_genbranch.set_defaults(func=cmd_genbranch)
 
     # destroy
     parser_destroy = subparsers.add_parser('destroy', help="Destroy all git-pile on this repo")
