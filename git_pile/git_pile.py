@@ -5,10 +5,12 @@ import argparse
 import os
 import os.path as op
 import shutil
+import subprocess
 import sys
 import tempfile
 
 from contextlib import contextmanager
+from time import strftime
 
 try:
     import argcomplete
@@ -16,6 +18,8 @@ except ImportError:
     pass
 
 from .helpers import run_wrapper
+from .helpers import parse_raw_diff
+
 
 # external commands
 git = run_wrapper('git', capture=True)
@@ -196,6 +200,17 @@ def parse_commit_range(commit_range, default_begin, default_end):
     return base, result
 
 
+def get_series_linenum_dict(d):
+    series = dict()
+    with open(op.join(d, "series"), "r") as f:
+        linenumber = 0
+        for l in f:
+            series[l[:-1]] = linenumber
+            linenumber += 1
+
+    return series
+
+
 # pre-existent patches are removed, all patches written from commit_range,
 # "config" and "series" overwritten with new valid content
 def genpatches(output, base_commit, result_commit):
@@ -246,6 +261,31 @@ def genpatches(output, base_commit, result_commit):
     return 0
 
 
+def gen_cover_letter(diff, output, n_patches, baseline_commit):
+    user = git("config --get user.name").stdout.strip()
+    email = git("config --get user.email").stdout.strip()
+    # RFC 2822-compliant date format
+    now = strftime("%a, %d %b %Y %T %z")
+    baseline = git("-C %s rev-parse %s" % (git_root(), baseline_commit)).stdout.strip()
+
+    cover = op.join(output, "0000-cover-letter.patch")
+    with open(cover, "w") as f:
+        f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: {user} <{email}>
+Date: {date}
+Subject: [PATCH 0/{n_patches}] *** SUBJECT HERE ***
+
+*** BLURB HERE ***
+
+---
+Changes below are based on current pile tree with BASELINE={baseline}
+
+""".format(user=user, email=email, date=now, n_patches=n_patches, baseline=baseline))
+        for l in diff:
+            f.write(l)
+
+    return cover
+
 def cmd_genpatches(args):
     config = Config()
     if not config.check_is_valid():
@@ -266,6 +306,67 @@ def cmd_genpatches(args):
 
     return genpatches(output, base, result)
 
+
+def cmd_format_patch(args):
+    config = Config()
+    if not config.check_is_valid():
+        return 1
+
+    # Allow the user to name the topic/feature branch as they please so
+    # default to base_branch..HEAD
+    base, result = parse_commit_range(args.commit_range, config.base_branch, "HEAD")
+
+    with temporary_worktree(config.pile_branch) as tmpdir:
+        ret = genpatches(tmpdir, base, result)
+        if ret != 0:
+            return 1
+
+        git("-C %s add -A" % tmpdir)
+
+
+        with subprocess.Popen(["git", "-C", tmpdir, "diff", "--cached", "-p", "--raw" ],
+                              stdout=subprocess.PIPE, universal_newlines=True) as proc:
+            # get a list of (state, new_name) tuples
+            changed_files = parse_raw_diff(proc.stdout)
+            # and finish reading all the diff
+            diff = proc.stdout.readlines()
+            if not diff:
+                fatal("Nothing changed from %s..%s to %s..%s"
+                      % (config.base_branch, config.result_branch, base, result))
+       
+        patches = []
+        for action, fn in changed_files:
+            # deleted files will appear in the series file diff, we can skip them here
+            if action == 'D':
+                continue
+
+            # only collect the patch files
+            if not fn.endswith(".patch"):
+                continue
+
+            if action not in "RACMT":
+                fatal("Unknown state in diff '%s' for file '%s'" % (action, fn))
+
+            patches.append(fn)
+
+        series = get_series_linenum_dict(tmpdir)
+        patches.sort(key=lambda p: series.get(p, 0))
+
+        # From here on, use the real directory
+        output = args.output_directory
+        os.makedirs(output, exist_ok=True)
+        rm_patches(output)
+
+        cover = gen_cover_letter(diff, output, len(patches), config.base_branch)
+        print(cover)
+
+        for i, p in enumerate(patches):
+            old = op.join(tmpdir, p)
+            new = op.join(output, "%04d-%s" % (i + 1, p[5:]))
+            shutil.copy(old, new)
+            print(new)
+
+    return 0
 
 def cmd_genbranch(args):
     config = Config()
@@ -444,6 +545,26 @@ series  config  X'.patch  Y'.patch  Z'.patch
         action="store_true",
         default=False)
     parser_genbranch.set_defaults(func=cmd_genbranch)
+
+    # format-patch
+    parser_format_patch = subparsers.add_parser('format-patch', help="Generate patches from BASE_BRANCH..HEAD and save patch series to output directory to be shared on a mailing list")
+    parser_format_patch.add_argument(
+        "-o", "--output-directory",
+        help="Use OUTPUT_DIR to store the resulting files instead of the CWD. This must be an empty/non-existent directory unless -f/--force is also used",
+        metavar="OUTPUT_DIR",
+        default="")
+    parser_format_patch.add_argument(
+        "-f", "--force",
+        help="Force use of OUTPUT_DIR even if it has patches. The existent patches will be removed.",
+        action="store_true",
+        default=False)
+    parser_format_patch.add_argument(
+        "commit_range",
+        help="Commit range to use for the generated patches (default: BASE_BRANCH..HEAD)",
+        metavar="COMMIT_RANGE",
+        nargs="?",
+        default="")
+    parser_format_patch.set_defaults(func=cmd_format_patch)
 
     # destroy
     parser_destroy = subparsers.add_parser('destroy', help="Destroy all git-pile on this repo")
