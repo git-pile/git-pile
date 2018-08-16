@@ -58,6 +58,12 @@ def git_branch_exists(branch):
     return git("show-ref --verify --quiet refs/heads/%s" % branch, check=False).returncode == 0
 
 
+def update_baseline(d, commit):
+    with open(op.join(d, "config"), "w") as f:
+        rev = git("rev-parse %s" % commit).stdout.strip()
+        f.write("BASELINE=%s" % rev)
+
+
 def cmd_init(args):
     # TODO: check if already initialized
     # TODO: check if arguments make sense
@@ -84,9 +90,7 @@ def cmd_init(args):
         # Workaround is to do that ourselves with a temporary repository
         with tempfile.TemporaryDirectory() as d:
             git("-C %s init" % d)
-            with open(op.join(d, "config"), "w") as f:
-                rev = git("rev-parse %s" % config.base_branch).stdout.strip()
-                f.write("BASELINE=%s" % rev)
+            update_baseline(d, config.base_branch)
             git("-C %s add -A" % d)
             git(["-C", d, "commit", "-m", "Initial git-pile configuration"])
 
