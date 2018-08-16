@@ -142,6 +142,21 @@ def has_patches(dest):
     return False
 
 
+def parse_commit_range(commit_range, default_begin, default_end):
+    if not commit_range:
+        return default_begin, default_end
+
+    # sanity checks
+    try:
+        base, result = commit_range.split("..")
+        git("rev-parse %s" % base, stderr=nul_f, stdout=nul_f)
+        git("rev-parse %s" % result, stderr=nul_f, stdout=nul_f)
+    except (ValueError, subprocess.CalledProcessError) as e:
+        fatal("Invalid commit range: %s" % commit_range)
+
+    return base, result
+
+
 def cmd_genpatches(args):
     config = Config()
     if not config.check_is_valid():
@@ -157,12 +172,9 @@ def cmd_genpatches(args):
     # 3) Do not number the files: numbers will change when patches are added/removed
     # 4) To avoid filename clashes due to (3), check for each patch if a file
     #    already exists and workaround it
-    if args.commit_range != "":
-        commit_range = args.commit_range
-    else:
-        commit_range = "%s..%s" % (config.base_branch, config.result_branch)
-
-    commit_list = git("rev-list --reverse %s" % commit_range).stdout.strip().split('\n')
+    base, result = parse_commit_range(args.commit_range, config.base_branch,
+                                      config.result_branch)
+    commit_list = git("rev-list --reverse %s..%s" % (base, result)).stdout.strip().split('\n')
 
     # Do everything in a temporary directory and once we know it went ok, move
     # to the final destination - we can use os.rename() since we are creating
