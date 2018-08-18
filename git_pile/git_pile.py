@@ -42,7 +42,10 @@ class Config:
         self.pile_branch = ""
         self.base_branch = ""
 
-        s = git(["config", "--get-regex", "pile\\.*"]).stdout.strip()
+        s = git(["config", "--get-regex", "pile\\.*"], check=False, stderr=nul_f).stdout.strip()
+        if not s:
+            return
+
         for kv in s.split('\n'):
             key, value = kv.strip().split()
             # pile.*
