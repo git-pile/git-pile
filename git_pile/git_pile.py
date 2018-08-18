@@ -88,6 +88,16 @@ def git_worktree_get_checkout_path(root, branch):
         state[v[0]] = v[1] if len(v) > 1 else None
 
 
+def get_baseline(d):
+    with open(op.join(d, "config"), "r") as f:
+        for l in f:
+            if l.startswith("BASELINE="):
+                baseline = l[9:].strip()
+                return baseline
+
+    return None
+
+
 def update_baseline(d, commit):
     with open(op.join(d, "config"), "w") as f:
         rev = git("rev-parse %s" % commit).stdout.strip()
@@ -370,15 +380,9 @@ def cmd_genbranch(args):
     if not config.check_is_valid():
         return 1
 
-    baseline = None
     branch = args.branch if args.branch else config.result_branch
     root = git_root()
-
-    with open(op.join(config.dir, "config"), "r") as f:
-        for l in f:
-            if l.startswith("BASELINE="):
-                baseline = l[9:].strip()
-                break
+    baseline = get_baseline(op.join(root, config.dir))
 
     new_baseline = git("-C %s rev-parse %s" % (root, config.base_branch)).stdout.strip()
     if baseline != new_baseline:
