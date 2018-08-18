@@ -433,6 +433,9 @@ def cmd_destroy(args):
     git_("worktree remove --force %s" % config.dir)
     git_("branch -D %s" % config.pile_branch)
 
+    # implode
+    git_("config --remove-section pile")
+
 
 def parse_args(cmd_args):
     desc = """Manage a pile of patches on top of a git branch
