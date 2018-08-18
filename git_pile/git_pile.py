@@ -120,12 +120,6 @@ def cmd_init(args):
 
     config = Config()
 
-    # TODO: remove prints
-    print("dir=%s\npile-branch=%s\nbase-branch=%s\nresult-branch=%s" %
-          (config.dir, config.pile_branch, config.base_branch,
-           config.result_branch))
-    print("is-valid=%s" % config.is_valid())
-
     if not git_branch_exists(config.pile_branch):
         # Create and checkout an orphan branch named `config.pile_branch` at the
         # `config.dir` location. Unfortunately git-branch can't do that;
