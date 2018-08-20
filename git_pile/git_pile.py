@@ -5,8 +5,12 @@ import argparse
 import os
 import os.path as op
 import shutil
+import subprocess
 import sys
 import tempfile
+
+from contextlib import contextmanager
+from time import strftime
 
 try:
     import argcomplete
@@ -14,6 +18,8 @@ except ImportError:
     pass
 
 from .helpers import run_wrapper
+from .helpers import parse_raw_diff
+
 
 # external commands
 git = run_wrapper('git', capture=True)
@@ -58,6 +64,49 @@ def git_branch_exists(branch):
     return git("show-ref --verify --quiet refs/heads/%s" % branch, check=False).returncode == 0
 
 
+def git_root():
+    return git("rev-parse --show-toplevel").stdout.strip("\n")
+
+
+def git_worktree_get_checkout_path(root, branch):
+    state = dict()
+    out = git("-C %s worktree list --porcelain" % root).stdout.split("\n")
+
+    for l in out:
+        if not l:
+            # end block
+            if state.get("branch", None) == "refs/heads/" + branch:
+                return state["worktree"]
+
+            state = dict()
+            continue
+
+        v = l.split(" ")
+        state[v[0]] = v[1] if len(v) > 1 else None
+
+
+def update_baseline(d, commit):
+    with open(op.join(d, "config"), "w") as f:
+        rev = git("rev-parse %s" % commit).stdout.strip()
+        f.write("BASELINE=%s" % rev)
+
+
+# Create a temporary directory to checkout a detached branch with git-worktree
+# making sure it gets deleted (both the directory and from git-worktree) when
+# we finished using it.
+#
+# To be used in `with` context handling.
+@contextmanager
+def temporary_worktree(commit, dir=git_root(), prefix=".git-pile-worktree"):
+    try:
+        with tempfile.TemporaryDirectory(dir=dir, prefix=prefix) as d:
+            git("worktree add --detach --checkout %s %s" % (d, commit),
+                stdout=nul_f, stderr=nul_f)
+            yield d
+    finally:
+        git("worktree remove %s" % d)
+
+
 def cmd_init(args):
     # TODO: check if already initialized
     # TODO: check if arguments make sense
@@ -84,9 +133,7 @@ def cmd_init(args):
         # Workaround is to do that ourselves with a temporary repository
         with tempfile.TemporaryDirectory() as d:
             git("-C %s init" % d)
-            with open(op.join(d, "config"), "w") as f:
-                rev = git("rev-parse %s" % config.base_branch).stdout.strip()
-                f.write("BASELINE=%s" % rev)
+            update_baseline(d, config.base_branch)
             git("-C %s add -A" % d)
             git(["-C", d, "commit", "-m", "Initial git-pile configuration"])
 
@@ -138,11 +185,35 @@ def has_patches(dest):
     return False
 
 
-def cmd_genpatches(args):
-    config = Config()
-    if not config.check_is_valid():
-        return 1
+def parse_commit_range(commit_range, default_begin, default_end):
+    if not commit_range:
+        return default_begin, default_end
 
+    # sanity checks
+    try:
+        base, result = commit_range.split("..")
+        git("rev-parse %s" % base, stderr=nul_f, stdout=nul_f)
+        git("rev-parse %s" % result, stderr=nul_f, stdout=nul_f)
+    except (ValueError, subprocess.CalledProcessError) as e:
+        fatal("Invalid commit range: %s" % commit_range)
+
+    return base, result
+
+
+def get_series_linenum_dict(d):
+    series = dict()
+    with open(op.join(d, "series"), "r") as f:
+        linenumber = 0
+        for l in f:
+            series[l[:-1]] = linenumber
+            linenumber += 1
+
+    return series
+
+
+# pre-existent patches are removed, all patches written from commit_range,
+# "config" and "series" overwritten with new valid content
+def genpatches(output, base_commit, result_commit):
     # Do's and don'ts to generate patches to be used as an "always evolving
     # series":
     #
@@ -153,12 +224,11 @@ def cmd_genpatches(args):
     # 3) Do not number the files: numbers will change when patches are added/removed
     # 4) To avoid filename clashes due to (3), check for each patch if a file
     #    already exists and workaround it
-    if args.commit_range != "":
-        commit_range = args.commit_range
-    else:
-        commit_range = "%s..%s" % (config.base_branch, config.result_branch)
 
+    commit_range = "%s..%s" % (base_commit, result_commit)
     commit_list = git("rev-list --reverse %s" % commit_range).stdout.strip().split('\n')
+    if not commit_list:
+        fatal("No commits in range %s" % commit_range)
 
     # Do everything in a temporary directory and once we know it went ok, move
     # to the final destination - we can use os.rename() since we are creating
@@ -167,22 +237,12 @@ def cmd_genpatches(args):
         staging = op.join(d, "staging")
         series = []
         for c in commit_list:
-            path_orig = git(["format-patch", "--signature= ", "-o", staging, "-N", "-1", c]).stdout.strip()
+            path_orig = git(["format-patch", "--zero-commit", "--signature=", "-o", staging, "-N", "-1", c]).stdout.strip()
             path = fix_duplicate_patch_name(d, path_orig, len(commit_list))
             os.rename(path_orig, path)
             series.append(path)
 
         os.rmdir(staging)
-
-        # Be a little careful here: the user might have passed e.g. /tmp: we
-        # don't want to remove patches there to avoid surprises
-        if args.output_directory != "":
-            output = args.output_directory
-            if has_patches(output) and not args.force:
-                fatal("'%s' is not default output directory and has patches in it.\n"
-                      "Force with --force or pass an empty/non-existent directory" % output)
-        else:
-            output = config.dir
 
         os.makedirs(output, exist_ok=True)
         rm_patches(output)
@@ -190,11 +250,177 @@ def cmd_genpatches(args):
         for p in series:
             s = shutil.copy(p, output)
 
-        with open(op.join(output, "series"), "w") as f:
-            f.write("# Auto-generated by git-pile's genpatches\n\n")
-            for s in series:
-                f.write(op.basename(s))
-                f.write("\n")
+    with open(op.join(output, "series"), "w") as f:
+        f.write("# Auto-generated by git-pile\n\n")
+        for s in series:
+            f.write(op.basename(s))
+            f.write("\n")
+
+    update_baseline(output, base_commit)
+
+    return 0
+
+
+def gen_cover_letter(diff, output, n_patches, baseline_commit):
+    user = git("config --get user.name").stdout.strip()
+    email = git("config --get user.email").stdout.strip()
+    # RFC 2822-compliant date format
+    now = strftime("%a, %d %b %Y %T %z")
+    baseline = git("-C %s rev-parse %s" % (git_root(), baseline_commit)).stdout.strip()
+
+    cover = op.join(output, "0000-cover-letter.patch")
+    with open(cover, "w") as f:
+        f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: {user} <{email}>
+Date: {date}
+Subject: [PATCH 0/{n_patches}] *** SUBJECT HERE ***
+
+*** BLURB HERE ***
+
+---
+Changes below are based on current pile tree with BASELINE={baseline}
+
+""".format(user=user, email=email, date=now, n_patches=n_patches, baseline=baseline))
+        for l in diff:
+            f.write(l)
+
+    return cover
+
+def cmd_genpatches(args):
+    config = Config()
+    if not config.check_is_valid():
+        return 1
+
+    base, result = parse_commit_range(args.commit_range, config.base_branch,
+                                      config.result_branch)
+
+    # Be a little careful here: the user might have passed e.g. /tmp: we
+    # don't want to remove patches there to avoid surprises
+    if args.output_directory != "":
+        output = args.output_directory
+        if has_patches(output) and not args.force:
+            fatal("'%s' is not default output directory and has patches in it.\n"
+                  "Force with --force or pass an empty/non-existent directory" % output)
+    else:
+        output = config.dir
+
+    return genpatches(output, base, result)
+
+
+def cmd_format_patch(args):
+    config = Config()
+    if not config.check_is_valid():
+        return 1
+
+    # Allow the user to name the topic/feature branch as they please so
+    # default to base_branch..HEAD
+    base, result = parse_commit_range(args.commit_range, config.base_branch, "HEAD")
+
+    with temporary_worktree(config.pile_branch) as tmpdir:
+        ret = genpatches(tmpdir, base, result)
+        if ret != 0:
+            return 1
+
+        git("-C %s add -A" % tmpdir)
+
+
+        with subprocess.Popen(["git", "-C", tmpdir, "diff", "--cached", "-p", "--raw" ],
+                              stdout=subprocess.PIPE, universal_newlines=True) as proc:
+            # get a list of (state, new_name) tuples
+            changed_files = parse_raw_diff(proc.stdout)
+            # and finish reading all the diff
+            diff = proc.stdout.readlines()
+            if not diff:
+                fatal("Nothing changed from %s..%s to %s..%s"
+                      % (config.base_branch, config.result_branch, base, result))
+       
+        patches = []
+        for action, fn in changed_files:
+            # deleted files will appear in the series file diff, we can skip them here
+            if action == 'D':
+                continue
+
+            # only collect the patch files
+            if not fn.endswith(".patch"):
+                continue
+
+            if action not in "RACMT":
+                fatal("Unknown state in diff '%s' for file '%s'" % (action, fn))
+
+            patches.append(fn)
+
+        series = get_series_linenum_dict(tmpdir)
+        patches.sort(key=lambda p: series.get(p, 0))
+
+        # From here on, use the real directory
+        output = args.output_directory
+        os.makedirs(output, exist_ok=True)
+        rm_patches(output)
+
+        cover = gen_cover_letter(diff, output, len(patches), config.base_branch)
+        print(cover)
+
+        for i, p in enumerate(patches):
+            old = op.join(tmpdir, p)
+            new = op.join(output, "%04d-%s" % (i + 1, p[5:]))
+            shutil.copy(old, new)
+            print(new)
+
+    return 0
+
+def cmd_genbranch(args):
+    config = Config()
+    if not config.check_is_valid():
+        return 1
+
+    baseline = None
+    branch = args.branch if args.branch else config.result_branch
+    root = git_root()
+
+    with open(op.join(config.dir, "config"), "r") as f:
+        for l in f:
+            if l.startswith("BASELINE="):
+                baseline = l[9:].strip()
+                break
+
+    new_baseline = git("-C %s rev-parse %s" % (root, config.base_branch)).stdout.strip()
+    if baseline != new_baseline:
+        print("Applying patches from different baseline %s (saved) to %s (%s)" %
+              (baseline, new_baseline, config.base_branch),
+              file=sys.stderr)
+
+    patches = []
+    with open(op.join(config.dir, "series"), "r") as f:
+        for l in f:
+            l = l.strip()
+            if not l or l.startswith("#"):
+                continue
+
+            p = op.join(config.dir, l)
+            if not op.isfile(p):
+                fatal("series file reference '%s', but it doesn't exist" % p)
+
+            patches.append(p)
+
+    # work in a separate directory to avoid cluttering whatever the user is doing
+    # on the main one
+    with temporary_worktree(config.base_branch) as d:
+        for p in patches:
+            if args.verbose:
+                print(p)
+            git("-C %s am %s" % (d, op.join(root, p)))
+
+        # always save HEAD to PILE_RESULT_HEAD
+        shutil.copyfile(op.join(root, ".git", "worktrees", op.basename(d), "HEAD"),
+                        op.join(root, ".git", "PILE_RESULT_HEAD"))
+
+        path = git_worktree_get_checkout_path(root, branch)
+        if path:
+            error("final result is PILE_RESULT_HEAD but branch '%s' could not be updated to it "
+                  "because it is checked out at '%s'" % (branch, path))
+            return 1
+
+        git("-C %s checkout -B %s HEAD" % (d, branch), stdout=nul_f, stderr=nul_f)
 
     return 0
 
@@ -306,6 +532,39 @@ series  config  X'.patch  Y'.patch  Z'.patch
         nargs="?",
         default="")
     parser_genpatches.set_defaults(func=cmd_genpatches)
+
+    # genbranch
+    parser_genbranch = subparsers.add_parser('genbranch', help="Generate RESULT_BRANCH by applying patches from PILE_BRANCH on top of BASE_BRANCH")
+    parser_genbranch.add_argument(
+        "-b", "--branch",
+        help="Use BRANCH to store the final result instead of RESULT_BRANCH",
+        metavar="BRANCH",
+        default="")
+    parser_genbranch.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        default=False)
+    parser_genbranch.set_defaults(func=cmd_genbranch)
+
+    # format-patch
+    parser_format_patch = subparsers.add_parser('format-patch', help="Generate patches from BASE_BRANCH..HEAD and save patch series to output directory to be shared on a mailing list")
+    parser_format_patch.add_argument(
+        "-o", "--output-directory",
+        help="Use OUTPUT_DIR to store the resulting files instead of the CWD. This must be an empty/non-existent directory unless -f/--force is also used",
+        metavar="OUTPUT_DIR",
+        default="")
+    parser_format_patch.add_argument(
+        "-f", "--force",
+        help="Force use of OUTPUT_DIR even if it has patches. The existent patches will be removed.",
+        action="store_true",
+        default=False)
+    parser_format_patch.add_argument(
+        "commit_range",
+        help="Commit range to use for the generated patches (default: BASE_BRANCH..HEAD)",
+        metavar="COMMIT_RANGE",
+        nargs="?",
+        default="")
+    parser_format_patch.set_defaults(func=cmd_format_patch)
 
     # destroy
     parser_destroy = subparsers.add_parser('destroy', help="Destroy all git-pile on this repo")
