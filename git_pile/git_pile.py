@@ -430,7 +430,8 @@ def cmd_destroy(args):
     config = Config()
 
     git_ = run_wrapper('git', capture=True, check=False, print_error_as_ignored=True)
-    git_("worktree remove --force %s" % config.dir)
+    if config.dir:
+        git_("worktree remove --force %s" % config.dir)
     git_("branch -D %s" % config.pile_branch)
 
     # implode
