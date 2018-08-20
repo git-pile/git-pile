@@ -64,3 +64,50 @@ class subcmd:
 
     def list():
         return subcmd.names
+
+
+# @f is a file-like object, list or anything that supports being iterated over.
+# Only the result of `git diff -p --raw`  is really parsed
+# Example input:
+#
+# :100644 100644 eeac82c f0bb378 R093     0001-Add-platform-3-2.patch   0001-Add-platform-3.5.patch
+# :000000 100644 0000000 0000000 A        0001-Add-xyz.patch
+# :000000 100644 0000000 0000000 A        0001-change-xyz.patch
+# :000000 100644 0000000 0000000 A        0001-move-readme.patch
+# :100644 100644 0000000 0000000 M        series
+# 
+# diff --git a/0001-move-readme.patch b/0001-move-readme.patch
+# ...
+#
+#
+# It stops parsing on the first blank line so the user can continue parsing the
+# rest as a normal diff
+# 
+# Return: a list of tuples with (action, new_fileame). Example:
+# [
+#  ("R", "0001-Add-platform-3.5.patch"),
+#  ("A", "0001-Add-xyz.patch"),
+#  ("A", "0001-change-xyz.patch"),
+#  ("A", "0001-move-readme.patch"),
+#  ("M", "series")
+# ]
+def parse_raw_diff(f):
+    changes = []
+    for l in f:
+        l = l.rstrip()
+        if not l:
+            break
+
+        state, *files = l.split("\t")
+        # sanity checks
+        if not state or len(state) < 5 or not files or len(files) > 2:
+            raise Exception("Doesn't know how to parse line: '%s'" % l)
+
+        action = state.split(" ")[4][0]
+
+        # we are only interested in the new name (the last entry in the line)
+        t = action, files[-1]
+
+        changes.append(t)
+
+    return changes
