@@ -40,9 +40,11 @@ class Config:
         self.dir = ""
         self.result_branch = ""
         self.pile_branch = ""
-        self.base_branch = ""
 
-        s = git(["config", "--get-regex", "pile\\.*"]).stdout.strip()
+        s = git(["config", "--get-regex", "pile\\.*"], check=False, stderr=nul_f).stdout.strip()
+        if not s:
+            return
+
         for kv in s.split('\n'):
             key, value = kv.strip().split()
             # pile.*
@@ -85,6 +87,16 @@ def git_worktree_get_checkout_path(root, branch):
         state[v[0]] = v[1] if len(v) > 1 else None
 
 
+def get_baseline(d):
+    with open(op.join(d, "config"), "r") as f:
+        for l in f:
+            if l.startswith("BASELINE="):
+                baseline = l[9:].strip()
+                return baseline
+
+    return None
+
+
 def update_baseline(d, commit):
     with open(op.join(d, "config"), "w") as f:
         rev = git("rev-parse %s" % commit).stdout.strip()
@@ -108,20 +120,18 @@ def temporary_worktree(commit, dir=git_root(), prefix=".git-pile-worktree"):
 
 
 def cmd_init(args):
+    try:
+        base_commit = git("rev-parse %s" % args.baseline, check=False).stdout.strip()
+    except subprocess.CalledProcessError:
+        fatal("invalid baseline commit %s" % args.baseline)
+
     # TODO: check if already initialized
     # TODO: check if arguments make sense
     git("config pile.dir %s" % args.dir)
     git("config pile.pile-branch %s" % args.pile_branch)
-    git("config pile.base-branch %s" % args.base_branch)
     git("config pile.result-branch %s" % args.result_branch)
 
     config = Config()
-
-    # TODO: remove prints
-    print("dir=%s\npile-branch=%s\nbase-branch=%s\nresult-branch=%s" %
-          (config.dir, config.pile_branch, config.base_branch,
-           config.result_branch))
-    print("is-valid=%s" % config.is_valid())
 
     if not git_branch_exists(config.pile_branch):
         # Create and checkout an orphan branch named `config.pile_branch` at the
@@ -133,7 +143,7 @@ def cmd_init(args):
         # Workaround is to do that ourselves with a temporary repository
         with tempfile.TemporaryDirectory() as d:
             git("-C %s init" % d)
-            update_baseline(d, config.base_branch)
+            update_baseline(d, base_commit)
             git("-C %s add -A" % d)
             git(["-C", d, "commit", "-m", "Initial git-pile configuration"])
 
@@ -185,9 +195,12 @@ def has_patches(dest):
     return False
 
 
-def parse_commit_range(commit_range, default_begin, default_end):
+def parse_commit_range(commit_range, pile_dir, default_end):
     if not commit_range:
-        return default_begin, default_end
+        baseline = get_baseline(pile_dir)
+        if not baseline:
+            fatal("no BASELINE configured in %s" % config.dir)
+        return baseline, default_end
 
     # sanity checks
     try:
@@ -261,12 +274,11 @@ def genpatches(output, base_commit, result_commit):
     return 0
 
 
-def gen_cover_letter(diff, output, n_patches, baseline_commit):
+def gen_cover_letter(diff, output, n_patches, baseline):
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
     now = strftime("%a, %d %b %Y %T %z")
-    baseline = git("-C %s rev-parse %s" % (git_root(), baseline_commit)).stdout.strip()
 
     cover = op.join(output, "0000-cover-letter.patch")
     with open(cover, "w") as f:
@@ -286,12 +298,13 @@ Changes below are based on current pile tree with BASELINE={baseline}
 
     return cover
 
+
 def cmd_genpatches(args):
     config = Config()
     if not config.check_is_valid():
         return 1
 
-    base, result = parse_commit_range(args.commit_range, config.base_branch,
+    base, result = parse_commit_range(args.commit_range, config.dir,
                                       config.result_branch)
 
     # Be a little careful here: the user might have passed e.g. /tmp: we
@@ -312,9 +325,10 @@ def cmd_format_patch(args):
     if not config.check_is_valid():
         return 1
 
-    # Allow the user to name the topic/feature branch as they please so
-    # default to base_branch..HEAD
-    base, result = parse_commit_range(args.commit_range, config.base_branch, "HEAD")
+    # Allow the user to name the topic/feature branch as they please:
+    # default to whatever the HEAD is
+    # default to baseline..HEAD
+    base, result = parse_commit_range(args.commit_range, config.dir, "HEAD")
 
     with temporary_worktree(config.pile_branch) as tmpdir:
         ret = genpatches(tmpdir, base, result)
@@ -322,6 +336,7 @@ def cmd_format_patch(args):
             return 1
 
         git("-C %s add -A" % tmpdir)
+        baseline = get_baseline(config.dir)
 
 
         with subprocess.Popen(["git", "-C", tmpdir, "diff", "--cached", "-p", "--raw" ],
@@ -332,7 +347,7 @@ def cmd_format_patch(args):
             diff = proc.stdout.readlines()
             if not diff:
                 fatal("Nothing changed from %s..%s to %s..%s"
-                      % (config.base_branch, config.result_branch, base, result))
+                      % (baseline, config.result_branch, base, result))
        
         patches = []
         for action, fn in changed_files:
@@ -357,7 +372,7 @@ def cmd_format_patch(args):
         os.makedirs(output, exist_ok=True)
         rm_patches(output)
 
-        cover = gen_cover_letter(diff, output, len(patches), config.base_branch)
+        cover = gen_cover_letter(diff, output, len(patches), baseline)
         print(cover)
 
         for i, p in enumerate(patches):
@@ -373,21 +388,9 @@ def cmd_genbranch(args):
     if not config.check_is_valid():
         return 1
 
-    baseline = None
     branch = args.branch if args.branch else config.result_branch
     root = git_root()
-
-    with open(op.join(config.dir, "config"), "r") as f:
-        for l in f:
-            if l.startswith("BASELINE="):
-                baseline = l[9:].strip()
-                break
-
-    new_baseline = git("-C %s rev-parse %s" % (root, config.base_branch)).stdout.strip()
-    if baseline != new_baseline:
-        print("Applying patches from different baseline %s (saved) to %s (%s)" %
-              (baseline, new_baseline, config.base_branch),
-              file=sys.stderr)
+    baseline = get_baseline(op.join(root, config.dir))
 
     patches = []
     with open(op.join(config.dir, "series"), "r") as f:
@@ -404,7 +407,7 @@ def cmd_genbranch(args):
 
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
-    with temporary_worktree(config.base_branch) as d:
+    with temporary_worktree(baseline) as d:
         for p in patches:
             if args.verbose:
                 print(p)
@@ -430,8 +433,12 @@ def cmd_destroy(args):
     config = Config()
 
     git_ = run_wrapper('git', capture=True, check=False, print_error_as_ignored=True)
-    git_("worktree remove --force %s" % config.dir)
+    if config.dir:
+        git_("worktree remove --force %s" % config.dir)
     git_("branch -D %s" % config.pile_branch)
+
+    # implode
+    git_("config --remove-section pile")
 
 
 def parse_args(cmd_args):
@@ -439,18 +446,26 @@ def parse_args(cmd_args):
 
 git-pile helps to manage a long running and always changing list of patches on
 top of git branch. It is similar to quilt, but aims to retain the git work flow
-exporting the final result as a branch.
+exporting the final result as a branch. The end result is a configuration setup
+that can still be used with it.
 
-There are 3 important branches to understand how to use git-pile:
+There are 2 branches and one commit head that are important to understand how
+git-pile works:
 
-    BASE_BRANCH: where patches will be applied on top of.
-    RESULT_BRANCH: the result of applying the patches on BASE_BRANCH
     PILE_BRANCH: where to keep the patches and track their history
+    RESULT_BRANCH: the result of applying the patches on top of (changing) base
 
-This is a typical scenario git-pile is used in which BASE_BRANCH is "master"
-and RESULT_BRANCH is "internal".
+The changing base is a commit that continues to be updated (either as a fast-forward
+or as non-ff) onto where we want to be based off. This changing head is here
+called BASELINE.
 
-A---B---C master
+    BASELINE: where patches will be applied on top of.
+
+This is a typical scenario git-pile is used in which BASELINE currently points
+to a "master" branch and RESULT_BRANCH is "internal" (commit hashes here
+onwards are fictitious).
+
+A---B---C 3df0f8e (master)
          \\
           X---Y---Z internal
 
@@ -459,14 +474,17 @@ example:
 
 series  config  X.patch  Y.patch  Z.patch
 
-The "series" and "config" file are there to allow git-pile to do its job
-and are retained for compatibility with quilt and qf. git-pile exposes
-commands to convert between RESULT_BRANCH and the files on PILE_BRANCH.
-This allows to save the history of the patches when BASE_BRANCH changes
-or patches are added, modified or removed on RESULT_BRANCH. Below is an
-example in which the BASE_BRANCH evolves adding more commits:
+The "series" and "config" files are there to allow git-pile to do its job and
+are retained for compatibility with quilt and qf. For that reason the latter is
+also where BASELINE is stored/read when it's needed. git-pile exposes commands
+to convert back and forth between RESULT_BRANCH and the files on PILE_BRANCH.
+Those commands allows to save the history of the patches when the BASELINE
+changes or patches are added, modified or removed in RESULT_BRANCH. Below is a
+example in which BASELINE may evolve to add more commit from upstream:
 
-A---B---C---D---E master
+          D---E master
+         /
+A---B---C 3df0f8e
          \\
           X---Y---Z internal
 
@@ -474,7 +492,7 @@ After a rebase of the RESULT_BRANCH we will have the following state, in
 which X', Y' and Z' denote the rebased patches. They may have possibly
 changed to solve conflicts or to apply cleanly:
 
-A---B---C---D---E master
+A---B---C---D---E 76bc046 (master)
                  \\
                   X'---Y'---Z' internal
 
@@ -502,19 +520,19 @@ series  config  X'.patch  Y'.patch  Z'.patch
         metavar="PILE_BRANCH",
         default="pile")
     parser_init.add_argument(
-        "-b", "--base-branch",
-        help="Base remote or local branch on top of which the patches from PILE_BRANCH should be applied (default: %(default)s)",
-        metavar="BASE_BRANCH",
+        "-b", "--baseline",
+        help="Baseline commit on top of which the patches from PILE_BRANCH should be applied (default: %(default)s)",
+        metavar="BASELINE",
         default="master")
     parser_init.add_argument(
         "-r", "--result-branch",
-        help="Branch to be created when applying patches from PILE_BRANCH on top of BASE_BRANCH (default: %(default)s",
+        help="Branch to be created when applying patches from PILE_BRANCH on top of BASELINE (default: %(default)s",
         metavar="RESULT_BRANCH",
         default="internal")
     parser_init.set_defaults(func=cmd_init)
 
     # genpatches
-    parser_genpatches = subparsers.add_parser('genpatches', help="Generate patches from BASE_BRANCH..RESULT_BRANCH and save to output directory")
+    parser_genpatches = subparsers.add_parser('genpatches', help="Generate patches from BASELINE..RESULT_BRANCH and save to output directory")
     parser_genpatches.add_argument(
         "-o", "--output-directory",
         help="Use OUTPUT_DIR to store the resulting files instead of the DIR from the configuration. This must be an empty/non-existent directory unless -f/--force is also used",
@@ -527,14 +545,14 @@ series  config  X'.patch  Y'.patch  Z'.patch
         default=False)
     parser_genpatches.add_argument(
         "commit_range",
-        help="Commit range to use for the generated patches (default: BASE_BRANCH..RESULT_BRANCH)",
+        help="Commit range to use for the generated patches (default: BASELINE..RESULT_BRANCH)",
         metavar="COMMIT_RANGE",
         nargs="?",
         default="")
     parser_genpatches.set_defaults(func=cmd_genpatches)
 
     # genbranch
-    parser_genbranch = subparsers.add_parser('genbranch', help="Generate RESULT_BRANCH by applying patches from PILE_BRANCH on top of BASE_BRANCH")
+    parser_genbranch = subparsers.add_parser('genbranch', help="Generate RESULT_BRANCH by applying patches from PILE_BRANCH on top of BASELINE")
     parser_genbranch.add_argument(
         "-b", "--branch",
         help="Use BRANCH to store the final result instead of RESULT_BRANCH",
@@ -547,7 +565,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
     parser_genbranch.set_defaults(func=cmd_genbranch)
 
     # format-patch
-    parser_format_patch = subparsers.add_parser('format-patch', help="Generate patches from BASE_BRANCH..HEAD and save patch series to output directory to be shared on a mailing list")
+    parser_format_patch = subparsers.add_parser('format-patch', help="Generate patches from BASELINE..HEAD and save patch series to output directory to be shared on a mailing list")
     parser_format_patch.add_argument(
         "-o", "--output-directory",
         help="Use OUTPUT_DIR to store the resulting files instead of the CWD. This must be an empty/non-existent directory unless -f/--force is also used",
@@ -560,7 +578,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
         default=False)
     parser_format_patch.add_argument(
         "commit_range",
-        help="Commit range to use for the generated patches (default: BASE_BRANCH..HEAD)",
+        help="Commit range to use for the generated patches (default: BASELINE..HEAD)",
         metavar="COMMIT_RANGE",
         nargs="?",
         default="")
