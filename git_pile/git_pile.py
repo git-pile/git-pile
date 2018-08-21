@@ -287,6 +287,9 @@ def gen_cover_letter(diff, output, n_patches, baseline, prefix):
 From: {user} <{email}>
 Date: {date}
 Subject: [{prefix} 0/{n_patches}] *** SUBJECT HERE ***
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 *** BLURB HERE ***
 
