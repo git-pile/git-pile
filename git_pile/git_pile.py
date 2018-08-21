@@ -342,8 +342,10 @@ def cmd_format_patch(args):
 
         git("-C %s add -A" % tmpdir)
         baseline = get_baseline(config.dir)
+        order_file = op.join(op.dirname(op.realpath(__file__)),
+                             "data", "git-cover-order.txt")
 
-        with subprocess.Popen(["git", "-C", tmpdir, "diff", "--cached", "-p", "--raw" ],
+        with subprocess.Popen(["git", "-C", tmpdir, "diff", "--cached", "-p", "--raw", '-O', order_file ],
                               stdout=subprocess.PIPE, universal_newlines=True) as proc:
             # get a list of (state, new_name) tuples
             changed_files = parse_raw_diff(proc.stdout)
