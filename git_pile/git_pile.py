@@ -294,7 +294,8 @@ Content-Transfer-Encoding: 8bit
 *** BLURB HERE ***
 
 ---
-Changes below are based on current pile tree with BASELINE={baseline}
+Changes below are based on current pile tree with
+BASELINE={baseline}
 
 """.format(user=user, email=email, date=now, n_patches=n_patches, baseline=baseline, prefix=prefix))
         for l in diff:
