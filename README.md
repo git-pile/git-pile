@@ -3,6 +3,35 @@ Manage a pile of patches on top of a git branch
 
 ## Quickstart
 
+### Running git-pile
+
+git-pile follows the git naming convention for binaries so we can use it as a
+subcommand to git. Either of the following forms work if the git-pile is in the
+search PATH:
+
+```bash
+$ git pile -h
+$ git-pile -h
+```
+
+For autocomplete to work you need Python's argcomplete module installed.
+In the first case you also need to source the bash autocomplete file
+`extra/git-pile-complete.sh` so git knows how to complete the subcommand.
+
+You can also install git-pile as a python package, although that's not
+recommended for now since it's not stable enough:
+
+```bash
+$ ./setup.py install
+```
+
+In case a `--user` option is provided to the command above it will install under `$HOME`
+directory and bash completion file will be at `$XDG_DATA_HOME/git-pile/bash_completion`.
+There isn't a standard user directory for bash completion we can install to, so
+the user is expected to source this file.
+
+### Repository initialization
+
 Initialize empty pile:
 
 ```bash
@@ -44,7 +73,7 @@ this "newfeature" branch.
 
 The cover-letter in a git-pile generated patch series always contain the diff
 of the original state of the tree to the current state. It may be used to apply
-the entire series by targeting the the pile directory instead of the normal
+the entire series by targeting the pile directory instead of the normal
 working directory.
 
 ```bash
