@@ -111,3 +111,13 @@ def parse_raw_diff(f):
         changes.append(t)
 
     return changes
+
+
+def info(s, *args, **kwargs):
+    color = kwargs.pop("color", True)
+    if color:
+        sl = ["‣\033[0;1;39m", s, *args, "\033[0m"]
+    else:
+        sl = [s, *args]
+
+    print(*sl, **kwargs)
