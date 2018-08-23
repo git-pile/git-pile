@@ -148,7 +148,7 @@ def temporary_worktree(commit, dir, prefix=".git-pile-worktree"):
 
 def cmd_init(args):
     try:
-        base_commit = git("rev-parse %s" % args.baseline, check=False).stdout.strip()
+        base_commit = git("rev-parse %s" % args.baseline, stderr=nul_f).stdout.strip()
     except subprocess.CalledProcessError:
         fatal("invalid baseline commit %s" % args.baseline)
 
