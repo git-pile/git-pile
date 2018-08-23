@@ -109,7 +109,7 @@ def update_baseline(d, commit):
 #
 # To be used in `with` context handling.
 @contextmanager
-def temporary_worktree(commit, dir=git_root(), prefix=".git-pile-worktree"):
+def temporary_worktree(commit, dir, prefix=".git-pile-worktree"):
     try:
         with tempfile.TemporaryDirectory(dir=dir, prefix=prefix) as d:
             git("worktree add --detach --checkout %s %s" % (d, commit),
@@ -335,7 +335,7 @@ def cmd_format_patch(args):
     # default to baseline..HEAD
     base, result = parse_commit_range(args.commit_range, config.dir, "HEAD")
 
-    with temporary_worktree(config.pile_branch) as tmpdir:
+    with temporary_worktree(config.pile_branch, git_root()) as tmpdir:
         ret = genpatches(tmpdir, base, result)
         if ret != 0:
             return 1
@@ -445,7 +445,7 @@ def cmd_genbranch(args):
 
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
-    with temporary_worktree(baseline) as d:
+    with temporary_worktree(baseline, root) as d:
         for p in patches:
             if args.verbose:
                 print(p)
