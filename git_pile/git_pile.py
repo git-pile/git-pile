@@ -250,7 +250,8 @@ def genpatches(output, base_commit, result_commit):
         staging = op.join(d, "staging")
         series = []
         for c in commit_list:
-            path_orig = git(["format-patch", "--zero-commit", "--signature=", "-o", staging, "-N", "-1", c]).stdout.strip()
+            path_orig = git(["format-patch", "--subject-prefix=PATCH", "--zero-commit", "--signature=",
+                             "-o", staging, "-N", "-1", c]).stdout.strip()
             path = fix_duplicate_patch_name(d, path_orig, len(commit_list))
             os.rename(path_orig, path)
             series.append(path)
@@ -274,7 +275,7 @@ def genpatches(output, base_commit, result_commit):
     return 0
 
 
-def gen_cover_letter(diff, output, n_patches, baseline):
+def gen_cover_letter(diff, output, n_patches, baseline, prefix):
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
@@ -285,14 +286,18 @@ def gen_cover_letter(diff, output, n_patches, baseline):
         f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
 Date: {date}
-Subject: [PATCH 0/{n_patches}] *** SUBJECT HERE ***
+Subject: [{prefix} 0/{n_patches}] *** SUBJECT HERE ***
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 *** BLURB HERE ***
 
 ---
-Changes below are based on current pile tree with BASELINE={baseline}
+Changes below are based on current pile tree with
+BASELINE={baseline}
 
-""".format(user=user, email=email, date=now, n_patches=n_patches, baseline=baseline))
+""".format(user=user, email=email, date=now, n_patches=n_patches, baseline=baseline, prefix=prefix))
         for l in diff:
             f.write(l)
 
@@ -337,9 +342,10 @@ def cmd_format_patch(args):
 
         git("-C %s add -A" % tmpdir)
         baseline = get_baseline(config.dir)
+        order_file = op.join(op.dirname(op.realpath(__file__)),
+                             "data", "git-cover-order.txt")
 
-
-        with subprocess.Popen(["git", "-C", tmpdir, "diff", "--cached", "-p", "--raw" ],
+        with subprocess.Popen(["git", "-C", tmpdir, "diff", "--cached", "-p", "--raw", '-O', order_file ],
                               stdout=subprocess.PIPE, universal_newlines=True) as proc:
             # get a list of (state, new_name) tuples
             changed_files = parse_raw_diff(proc.stdout)
@@ -372,13 +378,45 @@ def cmd_format_patch(args):
         os.makedirs(output, exist_ok=True)
         rm_patches(output)
 
-        cover = gen_cover_letter(diff, output, len(patches), baseline)
+        try:
+            prefix = git("config --get format.subjectprefix").stdout.strip()
+        except subprocess.CalledProcessError:
+            prefix = "PATCH"
+
+        cover = gen_cover_letter(diff, output, len(patches), baseline, prefix)
         print(cover)
 
         for i, p in enumerate(patches):
             old = op.join(tmpdir, p)
             new = op.join(output, "%04d-%s" % (i + 1, p[5:]))
-            shutil.copy(old, new)
+
+            # Copy patches to the final output direcory fixing the Subject
+            # lines to conform with the patch order and prefix
+            with open(old, "r") as oldf:
+                with open(new, "w") as newf:
+                    # parse header
+                    subject_header = "Subject: [PATCH] "
+                    for l in oldf:
+                        if l == "\n":
+                            # header end, give up, don't try to parse the body
+                            fatal("patch '%s' missing subject?" % old)
+                        if not l.startswith(subject_header):
+                            # header line != subject, just copy it
+                            newf.write(l)
+                            continue
+
+                        # found the subject, re-format it
+                        title = l[len(subject_header):]
+                        newf.write("Subject: [{prefix} {i}/{n_patches}] {title}".format(
+                                   prefix=prefix, i=i + 1, n_patches=len(patches),
+                                   title=title))
+                        break
+                    else:
+                        fatal("patch '%s' missing subject?" % old)
+
+                    # write all the other lines after Subject header at once
+                    newf.writelines(oldf.readlines())
+
             print(new)
 
     return 0

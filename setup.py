@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: LGPL-2.1+
 
+from os import path as op
 from setuptools import setup
 import sys
 
@@ -13,6 +14,7 @@ setup(
     description="Manage a pile of patches on top of git branches",
     url="FIXME",
     maintainer="git-pile contributors",
+    include_package_data=True,
     maintainer_email="FIXME@lists.freedesktop.org",
     license="LGPLv2+",
     scripts=["git-pile", "git-mbox-prepare"],
@@ -22,5 +24,11 @@ setup(
                  'Topic :: Software Development',
                  'Operating System :: POSIX',
                  'Operating System :: Unix'],
+    packages=['git_pile'],
+    package_data={'git_pile': [
+        op.join('data', 'git-cover-order.txt'),
+    ]},
+
+
     platforms='any',
 )
