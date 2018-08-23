@@ -152,8 +152,15 @@ def cmd_init(args):
     except subprocess.CalledProcessError:
         fatal("invalid baseline commit %s" % args.baseline)
 
-    # TODO: check if already initialized
-    # TODO: check if arguments make sense
+    path = git_worktree_get_checkout_path(git_root(), args.pile_branch)
+    if path:
+        fatal("branch '%s' is already checked out at '%s'" % (args.pile_branch, path))
+
+    if (op.exists(args.dir)):
+        fatal("'%s' already exists" % args.dir)
+
+    oldconfig = Config()
+
     git("config pile.dir %s" % args.dir)
     git("config pile.pile-branch %s" % args.pile_branch)
     git("config pile.result-branch %s" % args.result_branch)
@@ -161,7 +168,9 @@ def cmd_init(args):
     config = Config()
 
     if not git_branch_exists(config.pile_branch):
-        # Create and checkout an orphan branch named `config.pile_branch` at the
+        info("Creating branch %s" % config.pile_branch)
+
+        # Create and an orphan branch named `config.pile_branch` at the
         # `config.dir` location. Unfortunately git-branch can't do that;
         # git-checkout has a --orphan option, but that would necessarily
         # checkout the branch and the user would be left wondering what
@@ -176,8 +185,22 @@ def cmd_init(args):
 
             # Temporary repository created, now let's fetch and create our branch
             git("fetch %s master:%s" % (d, config.pile_branch), stdout=nul_f, stderr=nul_f)
-            git("worktree add --checkout %s %s" % (config.dir, config.pile_branch),
-                stdout=nul_f, stderr=nul_f)
+
+
+    # checkout pile branch as a new worktree
+    try:
+        git("worktree add --checkout %s %s" % (config.dir, config.pile_branch),
+            stdout=nul_f, stderr=nul_f)
+    except:
+        config.revert(oldconfig)
+        fatal("failed to checkout worktree at %s" % config.dir)
+
+    if oldconfig.is_valid():
+        info("Reinitialized existing git-pile's branch '%s' in '%s/'" %
+             (config.pile_branch, config.dir), color=False)
+    else:
+        info("Initialized empty git-pile's branch '%s' in '%s/'" %
+             (config.pile_branch, config.dir), color=False)
 
     return 0
 
