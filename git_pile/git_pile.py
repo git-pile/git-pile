@@ -53,6 +53,26 @@ class Config:
 
         return True
 
+    def revert(self, other):
+        if not other.is_valid():
+            self.destroy()
+
+        self.dir = other.dir
+        if self.dir:
+            git("config pile.dir %s" % self.dir)
+
+        self.result_branch = other.result_branch
+        if self.result_branch:
+            git("config pile.result-branch %s" % self.result_branch)
+
+        self.pile_branch = other.pile_branch
+        if self.pile_branch:
+            git("config pile.pile-branch %s" % self.pile_branch)
+
+
+    def destroy(self):
+        git("config --remove-section pile", check=False, stderr=nul_f, stdout=nul_f)
+
 
 def git_branch_exists(branch):
     return git("show-ref --verify --quiet refs/heads/%s" % branch, check=False).returncode == 0
@@ -90,6 +110,8 @@ def git_worktree_get_checkout_path(root, branch):
 
         v = l.split(" ")
         state[v[0]] = v[1] if len(v) > 1 else None
+
+    return None
 
 
 def get_baseline(d):
