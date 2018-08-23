@@ -121,3 +121,14 @@ def info(s, *args, **kwargs):
         sl = [s, *args]
 
     print(*sl, **kwargs)
+
+
+def fatal(s, *args, **kwargs):
+    kwargs.setdefault("file", sys.stderr)
+    print("fatal: ", s, *args, **kwargs)
+    sys.exit(1)
+
+
+def error(s, *args, **kwargs):
+    kwargs.setdefault("file", sys.stderr)
+    print("error: ", s, *args, **kwargs)

@@ -17,22 +17,14 @@ try:
 except ImportError:
     pass
 
-from .helpers import run_wrapper
-from .helpers import parse_raw_diff
+from .helpers import error, info, fatal
+from .helpers import parse_raw_diff, run_wrapper
 
 
 # external commands
 git = run_wrapper('git', capture=True)
 
 nul_f = open(os.devnull, 'w')
-
-
-def fatal(s):
-    print("fatal: %s" % s, file=sys.stderr)
-    sys.exit(1)
-
-def error(s):
-    print("error: %s" % s, file=sys.stderr)
 
 
 class Config:
