@@ -551,7 +551,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
         "-d", "--dir",
         help="Directory in which to place patches (default: %(default)s)",
         metavar="DIR",
-        default="pile")
+        default="patches")
     parser_init.add_argument(
         "-p", "--pile-branch",
         help="Branch name to use for patches (default: %(default)s)",
