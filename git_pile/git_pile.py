@@ -478,16 +478,17 @@ def cmd_genbranch(args):
 
     branch = args.branch if args.branch else config.result_branch
     root = git_root()
-    baseline = get_baseline(op.join(root, config.dir))
+    patchesdir = op.join(root, config.dir)
+    baseline = get_baseline(patchesdir)
 
     patches = []
-    with open(op.join(config.dir, "series"), "r") as f:
+    with open(op.join(patchesdir, "series"), "r") as f:
         for l in f:
             l = l.strip()
             if not l or l.startswith("#"):
                 continue
 
-            p = op.join(config.dir, l)
+            p = op.join(patchesdir, l)
             if not op.isfile(p):
                 fatal("series file reference '%s', but it doesn't exist" % p)
 
@@ -499,7 +500,7 @@ def cmd_genbranch(args):
         for p in patches:
             if args.verbose:
                 print(p)
-            git("-C %s am %s" % (d, op.join(root, p)))
+            git("-C %s am %s" % (d, op.join(patchesdir, p)))
 
         # always save HEAD to PILE_RESULT_HEAD
         shutil.copyfile(op.join(root, ".git", "worktrees", op.basename(d), "HEAD"),
