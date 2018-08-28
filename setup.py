@@ -3,10 +3,19 @@
 
 from os import path as op
 from setuptools import setup
+import os
 import sys
 
 if sys.version_info < (3, 3):
     sys.exit("Sorry, we need at least Python 3.3.x")
+
+if "install" in sys.argv and "--user" in sys.argv:
+    # this is not a standard location, the user still needs to source the file,
+    # but at least it's installed somewhere we can document
+    datadir = os.environ.get("XDG_DATA_HOME", op.join(op.expanduser('~'), '.local', 'share'))
+    bash_completion_dir = op.join(datadir, "git-pile", "bash_completion")
+else:
+    bash_completion_dir = '/etc/bash_completion.d'
 
 setup(
     name="git-pile",
@@ -28,7 +37,6 @@ setup(
     package_data={'git_pile': [
         op.join('data', 'git-cover-order.txt'),
     ]},
-
-
+    data_files=[(bash_completion_dir, ['extra/git-pile-complete.sh'])],
     platforms='any',
 )

@@ -27,6 +27,7 @@ class run_wrapper:
 
     def __call__(self, s, *args, **kwargs):
         capture = kwargs.pop("capture", self.capture)
+        print_error_as_ignored = kwargs.pop("print_error_as_ignored", self.print_error_as_ignored)
 
         if capture:
             if "stdout" not in kwargs:
@@ -34,7 +35,7 @@ class run_wrapper:
             if "encoding" not in kwargs:
                 kwargs["encoding"] = "utf-8"
 
-        if self.print_error_as_ignored:
+        if print_error_as_ignored:
             kwargs["stderr"] = subprocess.PIPE
             if "encoding" not in kwargs:
                 kwargs["encoding"] = "utf-8"
@@ -111,3 +112,24 @@ def parse_raw_diff(f):
         changes.append(t)
 
     return changes
+
+
+def info(s, *args, **kwargs):
+    color = kwargs.pop("color", True)
+    if color:
+        sl = ["‣\033[0;1;39m", s, *args, "\033[0m"]
+    else:
+        sl = [s, *args]
+
+    print(*sl, **kwargs)
+
+
+def fatal(s, *args, **kwargs):
+    kwargs.setdefault("file", sys.stderr)
+    print("fatal: ", s, *args, **kwargs)
+    sys.exit(1)
+
+
+def error(s, *args, **kwargs):
+    kwargs.setdefault("file", sys.stderr)
+    print("error: ", s, *args, **kwargs)

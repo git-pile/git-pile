@@ -17,22 +17,14 @@ try:
 except ImportError:
     pass
 
-from .helpers import run_wrapper
-from .helpers import parse_raw_diff
+from .helpers import error, info, fatal
+from .helpers import parse_raw_diff, run_wrapper
 
 
 # external commands
 git = run_wrapper('git', capture=True)
 
 nul_f = open(os.devnull, 'w')
-
-
-def fatal(s):
-    print("fatal: %s" % s, file=sys.stderr)
-    sys.exit(1)
-
-def error(s):
-    print("error: %s" % s, file=sys.stderr)
 
 
 class Config:
@@ -61,13 +53,46 @@ class Config:
 
         return True
 
+    def revert(self, other):
+        if not other.is_valid():
+            self.destroy()
+
+        self.dir = other.dir
+        if self.dir:
+            git("config pile.dir %s" % self.dir)
+
+        self.result_branch = other.result_branch
+        if self.result_branch:
+            git("config pile.result-branch %s" % self.result_branch)
+
+        self.pile_branch = other.pile_branch
+        if self.pile_branch:
+            git("config pile.pile-branch %s" % self.pile_branch)
+
+
+    def destroy(self):
+        git("config --remove-section pile", check=False, stderr=nul_f, stdout=nul_f)
+
 
 def git_branch_exists(branch):
     return git("show-ref --verify --quiet refs/heads/%s" % branch, check=False).returncode == 0
 
 
+# Return the toplevel directory of the outermost git root, i.e. even if you are in a worktree
+# checkout it will return the "main" directory. E.g:
+#
+# $ git worktree list
+# /tmp/git-pile-playground          9f6f8b4 [internal]
+# /tmp/git-pile-playground/patches  f7672c2 [pile]
+#
+# If CWD is any of those directories, git_root() will return the topmost:
+# /tmp/git-pile-playground
+#
+# It works when we have a .git dir inside a work tree, but not in the rare cases of
+# having a gitdir detached from the worktree
 def git_root():
-    return git("rev-parse --show-toplevel").stdout.strip("\n")
+    commondir = git("rev-parse --git-common-dir").stdout.strip("\n")
+    return git("-C %s rev-parse --show-toplevel" % op.join(commondir, "..")).stdout.strip("\n")
 
 
 def git_worktree_get_checkout_path(root, branch):
@@ -85,6 +110,8 @@ def git_worktree_get_checkout_path(root, branch):
 
         v = l.split(" ")
         state[v[0]] = v[1] if len(v) > 1 else None
+
+    return None
 
 
 def get_baseline(d):
@@ -109,7 +136,7 @@ def update_baseline(d, commit):
 #
 # To be used in `with` context handling.
 @contextmanager
-def temporary_worktree(commit, dir=git_root(), prefix=".git-pile-worktree"):
+def temporary_worktree(commit, dir, prefix=".git-pile-worktree"):
     try:
         with tempfile.TemporaryDirectory(dir=dir, prefix=prefix) as d:
             git("worktree add --detach --checkout %s %s" % (d, commit),
@@ -121,12 +148,19 @@ def temporary_worktree(commit, dir=git_root(), prefix=".git-pile-worktree"):
 
 def cmd_init(args):
     try:
-        base_commit = git("rev-parse %s" % args.baseline, check=False).stdout.strip()
+        base_commit = git("rev-parse %s" % args.baseline, stderr=nul_f).stdout.strip()
     except subprocess.CalledProcessError:
         fatal("invalid baseline commit %s" % args.baseline)
 
-    # TODO: check if already initialized
-    # TODO: check if arguments make sense
+    path = git_worktree_get_checkout_path(git_root(), args.pile_branch)
+    if path:
+        fatal("branch '%s' is already checked out at '%s'" % (args.pile_branch, path))
+
+    if (op.exists(args.dir)):
+        fatal("'%s' already exists" % args.dir)
+
+    oldconfig = Config()
+
     git("config pile.dir %s" % args.dir)
     git("config pile.pile-branch %s" % args.pile_branch)
     git("config pile.result-branch %s" % args.result_branch)
@@ -134,7 +168,9 @@ def cmd_init(args):
     config = Config()
 
     if not git_branch_exists(config.pile_branch):
-        # Create and checkout an orphan branch named `config.pile_branch` at the
+        info("Creating branch %s" % config.pile_branch)
+
+        # Create and an orphan branch named `config.pile_branch` at the
         # `config.dir` location. Unfortunately git-branch can't do that;
         # git-checkout has a --orphan option, but that would necessarily
         # checkout the branch and the user would be left wondering what
@@ -149,8 +185,22 @@ def cmd_init(args):
 
             # Temporary repository created, now let's fetch and create our branch
             git("fetch %s master:%s" % (d, config.pile_branch), stdout=nul_f, stderr=nul_f)
-            git("worktree add --checkout %s %s" % (config.dir, config.pile_branch),
-                stdout=nul_f, stderr=nul_f)
+
+
+    # checkout pile branch as a new worktree
+    try:
+        git("worktree add --checkout %s %s" % (config.dir, config.pile_branch),
+            stdout=nul_f, stderr=nul_f)
+    except:
+        config.revert(oldconfig)
+        fatal("failed to checkout worktree at %s" % config.dir)
+
+    if oldconfig.is_valid():
+        info("Reinitialized existing git-pile's branch '%s' in '%s/'" %
+             (config.pile_branch, config.dir), color=False)
+    else:
+        info("Initialized empty git-pile's branch '%s' in '%s/'" %
+             (config.pile_branch, config.dir), color=False)
 
     return 0
 
@@ -335,7 +385,7 @@ def cmd_format_patch(args):
     # default to baseline..HEAD
     base, result = parse_commit_range(args.commit_range, config.dir, "HEAD")
 
-    with temporary_worktree(config.pile_branch) as tmpdir:
+    with temporary_worktree(config.pile_branch, git_root()) as tmpdir:
         ret = genpatches(tmpdir, base, result)
         if ret != 0:
             return 1
@@ -428,16 +478,17 @@ def cmd_genbranch(args):
 
     branch = args.branch if args.branch else config.result_branch
     root = git_root()
-    baseline = get_baseline(op.join(root, config.dir))
+    patchesdir = op.join(root, config.dir)
+    baseline = get_baseline(patchesdir)
 
     patches = []
-    with open(op.join(config.dir, "series"), "r") as f:
+    with open(op.join(patchesdir, "series"), "r") as f:
         for l in f:
             l = l.strip()
             if not l or l.startswith("#"):
                 continue
 
-            p = op.join(config.dir, l)
+            p = op.join(patchesdir, l)
             if not op.isfile(p):
                 fatal("series file reference '%s', but it doesn't exist" % p)
 
@@ -445,11 +496,11 @@ def cmd_genbranch(args):
 
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
-    with temporary_worktree(baseline) as d:
+    with temporary_worktree(baseline, root) as d:
         for p in patches:
             if args.verbose:
                 print(p)
-            git("-C %s am %s" % (d, op.join(root, p)))
+            git("-C %s am %s" % (d, op.join(patchesdir, p)))
 
         # always save HEAD to PILE_RESULT_HEAD
         shutil.copyfile(op.join(root, ".git", "worktrees", op.basename(d), "HEAD"),
@@ -551,7 +602,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
         "-d", "--dir",
         help="Directory in which to place patches (default: %(default)s)",
         metavar="DIR",
-        default="pile")
+        default="patches")
     parser_init.add_argument(
         "-p", "--pile-branch",
         help="Branch name to use for patches (default: %(default)s)",
