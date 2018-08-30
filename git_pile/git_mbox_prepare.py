@@ -25,6 +25,7 @@ editor = run_wrapper("EDITOR", "vim")
 class Patch:
     def __init__(self, msg, match):
         self.msg = msg
+        self.match = match
 
         number = match.group("number")
         if number:
