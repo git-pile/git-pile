@@ -17,7 +17,7 @@ except ImportError:
     pass
 
 args = None
-subject_regex_str = r"\[PATCH *(?P<project>[\w-]*)? *(?P<version>v[0-9]*)? *(?P<number>[0-9]+/[0-9]*)? *\] (?P<title>.*)"
+subject_regex_str = r"\[PATCH *(?P<project>[a-zA-Z][\w-]*)? *(?P<version>[v|V][0-9]+)? *(?P<number>[0-9]+/[0-9]+)? *\] (?P<title>.*)"
 subject_regex = re.compile(subject_regex_str)
 editor = run_wrapper("EDITOR", "vim")
 
@@ -25,6 +25,7 @@ editor = run_wrapper("EDITOR", "vim")
 class Patch:
     def __init__(self, msg, match):
         self.msg = msg
+        self.match = match
 
         number = match.group("number")
         if number:
