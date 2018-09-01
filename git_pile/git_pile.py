@@ -617,7 +617,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
     subparsers = parser.add_subparsers(title="Commands", dest="command")
 
     # init
-    parser_init = subparsers.add_parser('init', help="Initialize configuration of git-pile in this repository")
+    parser_init = subparsers.add_parser('init', help="Initialize configuration of an empty pile in this repository")
     parser_init.add_argument(
         "-d", "--dir",
         help="Directory in which to place patches (default: %(default)s)",
