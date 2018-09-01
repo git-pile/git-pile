@@ -126,14 +126,22 @@ def git_worktree_get_checkout_path(root, branch):
     return path
 
 
+def _parse_baseline_line(iterable):
+    for l in iterable:
+        if l.startswith("BASELINE="):
+            baseline = l[9:].strip()
+            return baseline
+    return None
+
+
+def get_baseline_from_branch(branch):
+    out = git("show %s:config --" % branch).stdout
+    return _parse_baseline_line(out.splitlines())
+
+
 def get_baseline(d):
     with open(op.join(d, "config"), "r") as f:
-        for l in f:
-            if l.startswith("BASELINE="):
-                baseline = l[9:].strip()
-                return baseline
-
-    return None
+        return _parse_baseline_line(f)
 
 
 def update_baseline(d, commit):
