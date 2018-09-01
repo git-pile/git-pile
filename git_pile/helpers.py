@@ -133,3 +133,8 @@ def fatal(s, *args, **kwargs):
 def error(s, *args, **kwargs):
     kwargs.setdefault("file", sys.stderr)
     print("error: ", s, *args, **kwargs)
+
+
+def warn(s, *args, **kwargs):
+    kwargs.setdefault("file", sys.stderr)
+    print("warning: ", s, *args, **kwargs)
