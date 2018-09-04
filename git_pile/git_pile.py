@@ -95,6 +95,8 @@ def git_root():
     return git("-C %s rev-parse --show-toplevel" % op.join(commondir, "..")).stdout.strip("\n")
 
 
+# Return the path a certain branch is checked out at
+# or None.
 def git_worktree_get_checkout_path(root, branch):
     state = dict()
     out = git("-C %s worktree list --porcelain" % root).stdout.split("\n")
@@ -103,7 +105,7 @@ def git_worktree_get_checkout_path(root, branch):
         if not l:
             # end block
             if state.get("branch", None) == "refs/heads/" + branch:
-                return state["worktree"]
+                return op.realpath(state["worktree"])
 
             state = dict()
             continue
