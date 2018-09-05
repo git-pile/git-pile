@@ -48,7 +48,7 @@ class Config:
 
     def check_is_valid(self):
         if not self.is_valid():
-            error("git-pile configuration is not valid. Configure it first with git-pile init")
+            error("git-pile configuration is not valid. Configure it first with 'git pile init' or 'git pile setup'")
             return False
 
         return True
@@ -697,6 +697,24 @@ def cmd_genbranch(args):
     return 0
 
 
+def cmd_baseline(args):
+    config = Config()
+    if not config.check_is_valid():
+        return 1
+
+    root = git_root()
+    patchesdir = op.join(root, config.dir)
+    b_dir = get_baseline(patchesdir)
+    b_branch = get_baseline_from_branch(config.pile_branch)
+
+    if b_dir != b_branch:
+        fatal("Pile branch '%s' has baseline %s, but directory is currently at %s"
+              % (config.pile_branch, b_branch, b_dir))
+
+    print(b_branch)
+
+    return 0
+
 # Temporary command to help with development
 def cmd_destroy(args):
     config = Config()
@@ -880,6 +898,10 @@ series  config  X'.patch  Y'.patch  Z'.patch
         nargs="?",
         default="")
     parser_format_patch.set_defaults(func=cmd_format_patch)
+
+    # baseline
+    parser_baseline = subparsers.add_parser('baseline', help="Return the baseline commit hash")
+    parser_baseline.set_defaults(func=cmd_baseline)
 
     # destroy
     parser_destroy = subparsers.add_parser('destroy', help="Destroy all git-pile on this repo")
