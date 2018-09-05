@@ -100,12 +100,14 @@ def git_root():
 def git_worktree_get_checkout_path(root, branch):
     state = dict()
     out = git("-C %s worktree list --porcelain" % root).stdout.split("\n")
+    path = None
 
     for l in out:
         if not l:
             # end block
             if state.get("branch", None) == "refs/heads/" + branch:
-                return op.realpath(state["worktree"])
+                path = op.realpath(state["worktree"])
+                break
 
             state = dict()
             continue
@@ -113,7 +115,11 @@ def git_worktree_get_checkout_path(root, branch):
         v = l.split(" ")
         state[v[0]] = v[1] if len(v) > 1 else None
 
-    return None
+    # make sure `git worktree list` is in sync with reality
+    if not path or not op.isdir(path):
+        return None
+
+    return path
 
 
 def get_baseline(d):
