@@ -48,7 +48,7 @@ class Config:
 
     def check_is_valid(self):
         if not self.is_valid():
-            error("git-pile configuration is not valid. Configure it first with git-pile init")
+            error("git-pile configuration is not valid. Configure it first with 'git pile init' or 'git pile setup'")
             return False
 
         return True
