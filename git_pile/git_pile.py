@@ -78,6 +78,10 @@ def git_branch_exists(branch):
     return git("show-ref --verify --quiet refs/heads/%s" % branch, check=False).returncode == 0
 
 
+def git_remote_branch_exists(remote_and_branch):
+    return git("show-ref --verify --quiet refs/remotes/%s" % remote_and_branch, check=False).returncode == 0
+
+
 # Return the toplevel directory of the outermost git root, i.e. even if you are in a worktree
 # checkout it will return the "main" directory. E.g:
 #
@@ -95,15 +99,19 @@ def git_root():
     return git("-C %s rev-parse --show-toplevel" % op.join(commondir, "..")).stdout.strip("\n")
 
 
+# Return the path a certain branch is checked out at
+# or None.
 def git_worktree_get_checkout_path(root, branch):
     state = dict()
     out = git("-C %s worktree list --porcelain" % root).stdout.split("\n")
+    path = None
 
     for l in out:
         if not l:
             # end block
             if state.get("branch", None) == "refs/heads/" + branch:
-                return state["worktree"]
+                path = op.realpath(state["worktree"])
+                break
 
             state = dict()
             continue
@@ -111,23 +119,88 @@ def git_worktree_get_checkout_path(root, branch):
         v = l.split(" ")
         state[v[0]] = v[1] if len(v) > 1 else None
 
+    # make sure `git worktree list` is in sync with reality
+    if not path or not op.isdir(path):
+        return None
+
+    return path
+
+
+def _parse_baseline_line(iterable):
+    for l in iterable:
+        if l.startswith("BASELINE="):
+            baseline = l[9:].strip()
+            return baseline
     return None
+
+
+def get_baseline_from_branch(branch):
+    out = git("show %s:config --" % branch).stdout
+    return _parse_baseline_line(out.splitlines())
 
 
 def get_baseline(d):
     with open(op.join(d, "config"), "r") as f:
-        for l in f:
-            if l.startswith("BASELINE="):
-                baseline = l[9:].strip()
-                return baseline
-
-    return None
+        return _parse_baseline_line(f)
 
 
 def update_baseline(d, commit):
     with open(op.join(d, "config"), "w") as f:
         rev = git("rev-parse %s" % commit).stdout.strip()
         f.write("BASELINE=%s" % rev)
+
+
+# Both branch and remote can contain '/' so we can't disambiguate it
+# unless we go through the list of remotes. This takes an argument
+# like "origin/master", "myfork/wip", etc and return the branch name
+# stripping the remote prefix, i.e. "master" and "wip" respectively.
+# If no branch was found None is returned, which means that although
+# it looks like a remote/branch pair, it is not.
+def get_branch_from_remote_branch(remote_branch):
+    out = git("remote").stdout
+    for l in out.splitlines():
+        if remote_branch.startswith(l):
+            return remote_branch[len(l) + 1:]
+    return None
+
+
+def assert_valid_pile_branch(pile):
+    # --full-tree is necessary so we don't need "-C gitroot"
+    out = git("ls-tree -r --name-only --full-tree %s" % pile).stdout
+    has_config = False
+    has_series = False
+    non_patches = False
+
+    for l in out.splitlines():
+        if l == "config":
+            has_config = True
+        elif l == "series":
+            has_series = True
+        elif not l.endswith(".patch"):
+            non_patches = True
+
+    errorstr = "Branch '{pile}' does not look like a pile branch. No '{filename}' file found."
+    if not has_series:
+        fatal(errorstr.format(pile=pile, filename="series"))
+    if not has_config:
+        fatal(errorstr.format(pile=pile, filename="config"))
+    if non_patches:
+        warn("Branch '{pile}' has non-patch files".format(pile=pile))
+
+
+def assert_valid_result_branch(result_branch, baseline):
+    try:
+        git("rev-parse %s" % baseline, stderr=nul_f)
+    except subprocess.CalledProcessError:
+        fatal("invalid baseline commit %s" % baseline)
+
+    try:
+        out = git("merge-base %s %s" % (baseline, result_branch)).stdout.strip()
+    except subprocess.CalledProcessError:
+        out = None
+
+    if out != baseline:
+        fatal("branch '%s' does not contain baseline %s" % (result_branch, baseline))
 
 
 # Create a temporary directory to checkout a detached branch with git-worktree
@@ -201,6 +274,113 @@ def cmd_init(args):
     else:
         info("Initialized empty git-pile's branch '%s' in '%s/'" %
              (config.pile_branch, config.dir), color=False)
+
+    return 0
+
+
+def cmd_setup(args):
+    create_pile_branch = True
+    create_result_branch = True
+
+    if git_remote_branch_exists(args.pile_branch):
+        local_pile_branch = get_branch_from_remote_branch(args.pile_branch)
+        if git_branch_exists(local_pile_branch):
+            # allow case that e.g. 'origin/pile' and 'pile' point to the same commit
+            if git("rev-parse %s" % args.pile_branch).stdout == git("rev-parse %s" % local_pile_branch).stdout:
+                create_pile_branch = False
+            else:
+                fatal("using '%s' for pile but branch '%s' already exists and point elsewhere" % (args.pile_branch, local_pile_branch))
+    elif git_branch_exists(args.pile_branch):
+        local_pile_branch = args.pile_branch
+        create_pile_branch = False
+    else:
+        fatal("Branch '%s' does not exist neither as local or remote branch" % args.pile_branch)
+
+    # optional arg: use current branch that is checked out in git_root()
+    gitroot = git_root()
+    try:
+        result_branch = args.result_branch if args.result_branch else git('-C %s symbolic-ref --short -q HEAD' % gitroot).stdout.strip()
+    except subprocess.CalledProcessError:
+        fatal("no argument passed for result branch and no branch is currently checkout at '%s'" % gitroot)
+
+    # same as for pile branch but allow for non-existent result branch, we will just create one
+    if git_remote_branch_exists(result_branch):
+        local_result_branch = get_branch_from_remote_branch(result_branch)
+        if git_branch_exists(local_result_branch):
+            # allow case that e.g. 'origin/internal' and 'internal' point to the same commit
+            if git("rev-parse %s" % result_branch).stdout == git("rev-parse %s" % local_result_branch).stdout:
+                create_result_branch = False
+            else:
+                fatal("using '%s' for result but branch '%s' already exists and point elsewhere" % (result_branch, local_result_branch))
+    elif git_branch_exists(result_branch):
+        local_result_branch = result_branch
+        create_result_branch = False
+    else:
+        local_result_branch = git('-C %s symbolic-ref --short -q HEAD' % gitroot).stdout.strip()
+        create_result_branch = False
+
+    # content of the pile branch looks like a pile branch?
+    assert_valid_pile_branch(args.pile_branch)
+    baseline = get_baseline_from_branch(args.pile_branch)
+
+    # sane result branch wrt baseline configured?
+    assert_valid_result_branch(result_branch, baseline)
+
+    path = git_worktree_get_checkout_path(gitroot, local_pile_branch)
+    patchesdir = op.join(gitroot, args.dir)
+    if path:
+        # if pile branch is already checked out, it must be in the same
+        # patchesdir on where we are trying to configure.
+        if path != patchesdir:
+            fatal("branch '%s' is already checked out at '%s'"
+                  % (local_pile_branch, path))
+        need_worktree = False
+    else:
+        # no checkout of pile branch. One more sanity check: the dir doesn't
+        # exist yet, otherwise we could clutter whatever the user has there.
+        if (op.exists(patchesdir)):
+            fatal("'%s' already exists" % args.dir)
+        need_worktree = True
+
+    path = git_worktree_get_checkout_path(gitroot, local_result_branch)
+    if path and path != gitroot:
+        fatal("branch '%s' is already checked out at '%s'"
+              % (local_result_branch, path))
+
+    # Yay, it looks like all sanity checks passed and we are not being
+    # fuzzy-tested, try to do the useful work
+    if create_pile_branch:
+        info("Creating branch %s" % local_pile_branch)
+        git("branch -t %s %s" % (local_pile_branch, args.pile_branch))
+    if create_result_branch:
+        info("Creating branch %s" % local_result_branch)
+        git("branch -t %s %s" % (local_result_branch, result_branch))
+
+    if need_worktree:
+        # checkout pile branch as a new worktree
+        try:
+            git("-C %s worktree add --checkout %s %s" % (gitroot, args.dir, local_pile_branch),
+                stdout=nul_f, stderr=nul_f)
+        except:
+            fatal("failed to checkout worktree for '%s' at %s" % (local_pile_branch, args.dir))
+
+    # write down configuration
+    git("config pile.dir %s" % args.dir)
+    git("config pile.pile-branch %s" % local_pile_branch)
+    git("config pile.result-branch %s" % local_result_branch)
+
+    tracked_pile = git("rev-parse --abbrev-ref %s@{u}" % local_pile_branch,
+                       check=False).stdout
+    if tracked_pile:
+        tracked_pile = " (tracking %s)" % tracked_pile.strip()
+    tracked_result = git("rev-parse --abbrev-ref %s@{u}" % local_result_branch,
+                         check=False).stdout
+    if tracked_result:
+        tracked_result = " (tracking %s)" % tracked_result.strip()
+
+    info("Pile branch '%s'%s setup successfully to generate branch '%s'%s" %
+         (local_pile_branch, tracked_pile, local_result_branch, tracked_result),
+         color=False)
 
     return 0
 
@@ -597,7 +777,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
     subparsers = parser.add_subparsers(title="Commands", dest="command")
 
     # init
-    parser_init = subparsers.add_parser('init', help="Initialize configuration of git-pile in this repository")
+    parser_init = subparsers.add_parser('init', help="Initialize configuration of an empty pile in this repository")
     parser_init.add_argument(
         "-d", "--dir",
         help="Directory in which to place patches (default: %(default)s)",
@@ -619,6 +799,34 @@ series  config  X'.patch  Y'.patch  Z'.patch
         metavar="RESULT_BRANCH",
         default="internal")
     parser_init.set_defaults(func=cmd_init)
+
+    # setup
+    parser_setup = subparsers.add_parser('setup', help="Setup/copy configuration from a remote or already created branches")
+    parser_setup.add_argument(
+        "-d", "--dir",
+        help="Directory in which to place patches - same argument as for git-pile init (default: %(default)s)",
+        metavar="DIR",
+        default="patches")
+    parser_setup.add_argument("pile_branch",
+        help="Remote or local branch used to store the physical patch files. "
+             "In case a remote branch is passed, a local one will be created "
+             "with the same name as in remote and its upstream configuration "
+             "will be set accordingly (as in 'git branch <local-name> --set-upstream-to=<pile-branch>'. "
+             "Examples: 'origin/pile', 'myfork/pile', 'internal-remote/internal-branch'. "
+             "An existent local branch may be used as long as it looks like a "
+             "pile branch. Examples: 'pile', 'patches', etc.", metavar="PILE_BRANCH")
+    parser_setup.add_argument("result_branch",
+        help="Remote or local branch that will be generated as a result of applying "
+             "the patches from PILE_BRANCH to the base commit (baseline). In "
+             "case a remote branch is passed, a local one will be created "
+             "with the same name as in remote and its upstream configuration "
+             "will be set accordingly (as in 'git branch <local-name> --set-upstream-to=<pile-branch>. "
+             "Examples: 'origin/internal', 'myfork/wip', 'rt/linux-4.18.y-rt-rebase'. "
+             "An existent local branch may be used as long as it looks like a "
+             "result branch, i.e. it must contain the baseline commit configured in PILE_BRANCH. "
+             "If this argument is omitted, the current checked out branch is used in the same way local "
+             "branches are handled.", metavar="RESULT_BRANCH", nargs="?")
+    parser_setup.set_defaults(func=cmd_setup)
 
     # genpatches
     parser_genpatches = subparsers.add_parser('genpatches', help="Generate patches from BASELINE..RESULT_BRANCH and save to output directory")
