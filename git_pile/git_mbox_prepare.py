@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: LGPL-2.1+
 
 import argparse
+from io import StringIO
 import mailbox
 import os
 import os.path
@@ -37,18 +38,7 @@ class Patch:
         self.project = match.group("project")
         self.version = match.group("version")
         self.title = match.group("title").strip()
-
-        # transliterate
-        self.filename = self.title.translate({
-            ord(" "): "-", ord(":"): "-", ord("/"): "-", ord("*"): "-",
-            ord("("): "-", ord(")"): "-", ord("+"): "-", ord("["): "-",
-            ord("]"): "-", ord(","): "-", ord("."): "-", ord("#"): "-",
-        })
-        # remove duplicates and dash in the end
-        self.filename = re.sub(r"--+", r"-", self.filename)
-        self.filename = self.filename.strip('-')
-
-        self.filename = self.filename + '.patch'
+        self.filename = self._format_sanitized_subject(self.title) + '.patch'
 
     def __str__(self):
         return self.title
@@ -66,6 +56,40 @@ class Patch:
 
         return None
 
+    # This mimics format_sanitized_subject() in git's source code, converting
+    # the commit title to a sanitized form to be used as file name
+    #
+    # Basic rules:
+    #   - only alphanum chars, '.' and '-' are allowed
+    #   - a sequence of forbidden chars are replaced by a single '-'
+    #   - repeated '.' are added as a single one
+    #   - '.' and '-'  are trimmed from the end
+    #   - the first char in the result title is never '-'
+    def _format_sanitized_subject(self, s):
+        # oportunistically set the size of the string - trailing '.' will be discarded
+        # later anyway
+        result = StringIO(initial_value='.' * len(s))
+
+        # by using space = 2 we make it not to put a '-' in case the first chars are
+        # not allowed
+        space = 2
+        prev = None
+        for c in s:
+            if c == '.' and prev == '.':
+                continue
+
+            if c.isalnum() or c == '.' or c == '-':
+                if (space == 1):
+                    result.write("-")
+                space = 0
+                result.write(c)
+            else:
+                space = space | 1
+
+            prev = c
+
+        # trim any trailing '.' or '-' characters
+        return result.getvalue().rstrip("-.")
 
 class PatchSeries:
     def __init__(self, patches):
