@@ -73,22 +73,20 @@ class Patch:
         # by using space = 2 we make it not to put a '-' in case the first chars are
         # not allowed
         space = 2
-        skip = False
+        prev = None
         for c in s:
-            if skip:
-                if c == '.':
-                    continue
-                skip = False
+            if c == '.' and prev == '.':
+                continue
 
             if c.isalnum() or c == '.' or c == '-':
                 if (space == 1):
                     result.write("-")
                 space = 0
                 result.write(c)
-                if c == '.':
-                    skip = True
             else:
                 space = space | 1
+
+            prev = c
 
         # trim any trailing '.' or '-' characters
         return result.getvalue().rstrip("-.")
