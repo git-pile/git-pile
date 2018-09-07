@@ -66,30 +66,24 @@ class Patch:
     #   - '.' and '-'  are trimmed from the end
     #   - the first char in the result title is never '-'
     def _format_sanitized_subject(self, s):
-        # oportunistically set the size of the string - trailing '.' will be discarded
-        # later anyway
+        # Set the size of the input. Trailing '.' will be discarded later.
         result = StringIO(initial_value='.' * len(s))
 
-        # by using space = 2 we make it not to put a '-' in case the first chars are
-        # not allowed
-        space = 2
         prev = None
         for c in s:
-            if c == '.' and prev == '.':
+            # Replace any invalid character with '-'.
+            if not (c.isalnum() or c == '.' or c == '-'):
+                c = '-'
+
+            # Do not repeat '.' and '-'.
+            if prev == c and (c == '.' or c == '-'):
                 continue
 
-            if c.isalnum() or c == '.' or c == '-':
-                if (space == 1):
-                    result.write("-")
-                space = 0
-                result.write(c)
-            else:
-                space = space | 1
-
+            result.write(c)
             prev = c
 
-        # trim any trailing '.' or '-' characters
-        return result.getvalue().rstrip("-.")
+        # Trim invalid characters from the start and end.
+        return result.getvalue().lstrip("-").rstrip("-.")
 
 class PatchSeries:
     def __init__(self, patches):
