@@ -477,11 +477,41 @@ def copy_sanitized_patch(p, outputdir):
             else:
                 fatal("malformed patch %s\n" % p)
 
-            # everything but "index lines" are allowed
-            for l in it:
-                if l.startswith("index"):
-                    continue
+
+            while True:
+                # hunk header: everything but "index lines" are allowed,
+                # except if we are in a binary patch: in that case the
+                # index must be maintained otherwise it's not possible to
+                # reconstruct the branch
+                hunk_header = []
+                index_line = 0
+                is_binary = False
+                for l in it:
+                    if l.startswith("@@"):
+                        break
+                    if l.startswith("GIT binary patch"):
+                        is_binary = True
+                        break
+                    if l.startswith("index"):
+                        index_line = len(hunk_header)
+
+                    hunk_header.append(l)
+                else:
+                    fatal("malformed patch %s\n" % p)
+
+                if not is_binary:
+                    hunk_header.pop(index_line)
+
+                newf.writelines(hunk_header)
                 newf.write(l)
+
+                for l in it:
+                    newf.write(l)
+                    if l.startswith("diff --git"):
+                        break
+                else:
+                    # EOF, break outer loop
+                    break
 
 
 # pre-existent patches are removed, all patches written from commit_range,
