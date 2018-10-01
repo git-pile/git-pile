@@ -5,6 +5,13 @@ Manage a pile of patches on top of a git branch
   <img src="/docs/git-pile-cycle.svg" />
 </p>
 
+## Requirements
+
+ - Python >= 3.5
+ - git >= 2.19
+ - Python modules:
+   - argcomplete (optional)
+
 ## Quickstart
 
 ### Running git-pile

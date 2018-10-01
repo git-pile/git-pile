@@ -32,13 +32,13 @@ class run_wrapper:
         if capture:
             if "stdout" not in kwargs:
                 kwargs["stdout"] = subprocess.PIPE
-            if "encoding" not in kwargs:
-                kwargs["encoding"] = "utf-8"
+            if "universal_newlines" not in kwargs:
+                kwargs["universal_newlines"] = True
 
         if print_error_as_ignored:
             kwargs["stderr"] = subprocess.PIPE
-            if "encoding" not in kwargs:
-                kwargs["encoding"] = "utf-8"
+            if "universal_newlines" not in kwargs:
+                kwargs["universal_newlines"] = True
 
         kwargs["check"] = kwargs.get("check", self.check)
 
