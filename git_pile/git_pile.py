@@ -401,24 +401,23 @@ def fix_duplicate_patch_name(dest, path, max_retries):
 
 
 def rm_patches(dest):
-    with os.scandir(dest) as it:
-        for entry in it:
-            if not entry.is_file() or not entry.name.endswith(".patch"):
-                continue
+    for entry in os.scandir(dest):
+        if not entry.is_file() or not entry.name.endswith(".patch"):
+            continue
 
-            try:
-                os.remove(entry.path)
-            except PermissionError:
-                fatal("Could not remove %s: permission denied" % entry.path)
+        try:
+            os.remove(entry.path)
+        except PermissionError:
+            fatal("Could not remove %s: permission denied" % entry.path)
 
 
 def has_patches(dest):
     try:
-        with os.scandir(dest) as it:
-            for entry in it:
-                if entry.is_file() and entry.name.endswith(".patch"):
-                    it.close()
-                    return True
+        dir = os.scandir(dest)
+        for entry in dir:
+            if entry.is_file() and entry.name.endswith(".patch"):
+                dir.close()
+                return True
     except FileNotFoundError:
         pass
 
