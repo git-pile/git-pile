@@ -8,7 +8,7 @@ Manage a pile of patches on top of a git branch
 ## Requirements
 
  - Python >= 3.5
- - git >= 2.19
+ - git >= 2.7.4
  - Python modules:
    - argcomplete (optional)
 
