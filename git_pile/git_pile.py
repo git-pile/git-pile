@@ -431,9 +431,16 @@ def parse_commit_range(commit_range, pile_dir, default_end):
             fatal("no BASELINE configured in %s" % config.dir)
         return baseline, default_end
 
+    range = commit_range.split("..")
+    if len(range) == 1:
+        range.append("HEAD")
+    elif range[0] == "":
+        fatal("Invalid commit range '%s'" % commit_range)
+    elif range[1] == "":
+        range[1] = "HEAD"
+    base, result = range
     # sanity checks
     try:
-        base, result = commit_range.split("..")
         git("rev-parse %s" % base, stderr=nul_f, stdout=nul_f)
         git("rev-parse %s" % result, stderr=nul_f, stdout=nul_f)
     except (ValueError, subprocess.CalledProcessError) as e:
