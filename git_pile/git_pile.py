@@ -643,7 +643,7 @@ def cmd_format_patch(args):
             if not diff:
                 fatal("Nothing changed from %s..%s to %s..%s"
                       % (baseline, config.result_branch, base, result))
-       
+
         patches = []
         for action, fn in changed_files:
             # deleted files will appear in the series file diff, we can skip them here
@@ -720,25 +720,11 @@ def cmd_genbranch(args):
     patchesdir = op.join(root, config.dir)
     baseline = get_baseline(patchesdir)
 
-    patches = []
-    with open(op.join(patchesdir, "series"), "r") as f:
-        for l in f:
-            l = l.strip()
-            if not l or l.startswith("#"):
-                continue
-
-            p = op.join(patchesdir, l)
-            if not op.isfile(p):
-                fatal("series file reference '%s', but it doesn't exist" % p)
-
-            patches.append(p)
-
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
     with temporary_worktree(baseline, root) as d:
-        for p in patches:
-            print(p)
-            git("-C %s am %s" % (d, op.join(patchesdir, p)))
+        git("-C %s quiltimport --patches %s" %(d, patchesdir),
+            stdout=sys.stdout)
 
         # always save HEAD to PILE_RESULT_HEAD
         shutil.copyfile(op.join(root, ".git", "worktrees", op.basename(d), "HEAD"),
