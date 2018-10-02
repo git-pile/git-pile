@@ -738,8 +738,7 @@ def cmd_genbranch(args):
     # on the main one
     with temporary_worktree(baseline, root) as d:
         for p in patches:
-            if args.verbose:
-                print(p)
+            print(p)
             git("-C %s am %s" % (d, op.join(patchesdir, p)))
 
         # always save HEAD to PILE_RESULT_HEAD
@@ -933,10 +932,6 @@ series  config  X'.patch  Y'.patch  Z'.patch
         help="Use BRANCH to store the final result instead of RESULT_BRANCH",
         metavar="BRANCH",
         default="")
-    parser_genbranch.add_argument(
-        "-v", "--verbose",
-        action="store_true",
-        default=False)
     parser_genbranch.set_defaults(func=cmd_genbranch)
 
     # format-patch
