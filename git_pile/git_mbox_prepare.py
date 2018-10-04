@@ -297,7 +297,8 @@ def main(*cmd_args):
         fn = "%04d-%s" % (idx, p.filename)
         fn = os.path.join(args.output, fn)
         with open(fn, "w") as f:
-            f.write("""From: %s
+            f.write("""From 0000000000000000000000000000000000000000
+From: %s
 Date: %s
 Subject: [PATCH] %s
 
