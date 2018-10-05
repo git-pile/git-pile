@@ -739,11 +739,14 @@ def cmd_genbranch(args):
 
         path = git_worktree_get_checkout_path(root, branch)
         if path:
-            error("final result is PILE_RESULT_HEAD but branch '%s' could not be updated to it "
-                  "because it is checked out at '%s'" % (branch, path))
-            return 1
-
-        git("-C %s checkout -B %s HEAD" % (d, branch), stdout=nul_f, stderr=nul_f)
+            if not args.force:
+                error("final result is PILE_RESULT_HEAD but branch '%s' could not be updated to it "
+                      "because it is checked out at '%s'" % (branch, path))
+                return 1
+            else:
+                git("-C %s reset --hard PILE_RESULT_HEAD" % (path), stdout=nul_f, stderr=nul_f)
+        else:
+            git("-C %s checkout -f -B %s PILE_RESULT_HEAD" % (d, branch), stdout=nul_f, stderr=nul_f)
 
     return 0
 
@@ -924,6 +927,11 @@ series  config  X'.patch  Y'.patch  Z'.patch
         help="Use BRANCH to store the final result instead of RESULT_BRANCH",
         metavar="BRANCH",
         default="")
+    parser_genbranch.add_argument(
+        "-f", "--force",
+        help="Always create RESULT_BRANCH, even if it's checked out in any path",
+        action="store_true",
+        default=False)
     parser_genbranch.set_defaults(func=cmd_genbranch)
 
     # format-patch
