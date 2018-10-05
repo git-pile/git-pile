@@ -6,8 +6,8 @@ from setuptools import setup
 import os
 import sys
 
-if sys.version_info < (3, 3):
-    sys.exit("Sorry, we need at least Python 3.3.x")
+if sys.version_info < (3, 5):
+    sys.exit("Sorry, we need at least Python 3.5.x")
 
 if "install" in sys.argv and "--user" in sys.argv:
     # this is not a standard location, the user still needs to source the file,
