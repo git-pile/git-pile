@@ -40,6 +40,12 @@ class Patch:
         self.title = match.group("title").strip()
         self.filename = self._format_sanitized_subject(self.title) + '.patch'
 
+        try:
+            self.encoding = msg.get_charsets()[0]
+        except :
+            self.encoding = None
+
+
     def __str__(self):
         return self.title
 
@@ -296,13 +302,20 @@ def main(*cmd_args):
             continue
         fn = "%04d-%s" % (idx, p.filename)
         fn = os.path.join(args.output, fn)
+
+        if p.encoding:
+            payload = p.msg.get_payload(decode=True).decode(p.encoding)
+        else:
+            payload = p.msg.get_payload()
+
         with open(fn, "w") as f:
-            f.write("""From: %s
+            f.write("""From 0000000000000000000000000000000000000000
+From: %s
 Date: %s
 Subject: [PATCH] %s
 
 """ % (p.msg["from"], p.msg["date"], p.title))
-            f.write(p.msg.get_payload())
+            f.write(payload)
         print(fn)
         idx += 1
 
