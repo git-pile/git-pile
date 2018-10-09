@@ -746,7 +746,7 @@ def cmd_genbranch(args):
             else:
                 git("-C %s reset --hard PILE_RESULT_HEAD" % (path), stdout=nul_f, stderr=nul_f)
         else:
-            git("-C %s checkout -f -B %s PILE_RESULT_HEAD" % (d, branch), stdout=nul_f, stderr=nul_f)
+            git("-C %s checkout -f -B %s HEAD" % (d, branch), stdout=nul_f, stderr=nul_f)
 
     return 0
 
