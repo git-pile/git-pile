@@ -867,7 +867,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
         default="master")
     parser_init.add_argument(
         "-r", "--result-branch",
-        help="Branch to be created when applying patches from PILE_BRANCH on top of BASELINE (default: %(default)s",
+        help="Branch to be created when applying patches from PILE_BRANCH on top of BASELINE (default: %(default)s)",
         metavar="RESULT_BRANCH",
         default="internal")
     parser_init.set_defaults(func=cmd_init)
