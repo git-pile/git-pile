@@ -605,7 +605,9 @@ def cmd_genpatches(args):
     if not config.check_is_valid():
         return 1
 
-    base, result = parse_commit_range(args.commit_range, config.dir,
+    root = git_root()
+    patchesdir = op.join(root, config.dir)
+    base, result = parse_commit_range(args.commit_range, patchesdir,
                                       config.result_branch)
 
     commit_result = args.commit_result or args.message is not None
@@ -621,7 +623,7 @@ def cmd_genpatches(args):
             fatal("'%s' is not default output directory and has patches in it.\n"
                   "Force with --force or pass an empty/non-existent directory" % output)
     else:
-        output = config.dir
+        output = patchesdir
 
     genpatches(output, base, result)
 
