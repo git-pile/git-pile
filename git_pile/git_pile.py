@@ -608,9 +608,14 @@ def cmd_genpatches(args):
     base, result = parse_commit_range(args.commit_range, config.dir,
                                       config.result_branch)
 
+    commit_result = args.commit_result or args.message is not None
+
     # Be a little careful here: the user might have passed e.g. /tmp: we
     # don't want to remove patches there to avoid surprises
     if args.output_directory != "":
+        if commit_result:
+            fatal("output directory can't be combined with -c or -m option")
+
         output = args.output_directory
         if has_patches(output) and not args.force:
             fatal("'%s' is not default output directory and has patches in it.\n"
@@ -618,7 +623,19 @@ def cmd_genpatches(args):
     else:
         output = config.dir
 
-    return genpatches(output, base, result)
+    genpatches(output, base, result)
+
+    if commit_result:
+        git("-C %s add series config *.patch" % output)
+        commit_cmd = ["-C", output,  "commit"]
+        if args.message:
+            commit_cmd += ["-m", args.message]
+
+        print(args.message)
+        if git(commit_cmd, check=False, capture=False, stdout=None, stderr=None).returncode != 0:
+            fatal("patches generated at '%s', but git-commit failed. Leaving result in place." % output)
+
+    return 0
 
 
 def cmd_format_patch(args):
@@ -912,6 +929,17 @@ series  config  X'.patch  Y'.patch  Z'.patch
         help="Force use of OUTPUT_DIR even if it has patches. The existent patches will be removed.",
         action="store_true",
         default=False)
+    parser_genpatches.add_argument(
+        "-c", "--commit-result",
+        help="Commit the generated patches to the pile on success. This is only "
+             "valid without a -o option",
+        action="store_true",
+        default=False)
+    parser_genpatches.add_argument(
+        "-m", "--message",
+        help="Use the given MSG as the commit message. This implies the "
+             "--commit-result option",
+        metavar="MSG")
     parser_genpatches.add_argument(
         "commit_range",
         help="Commit range to use for the generated patches (default: BASELINE..RESULT_BRANCH)",
