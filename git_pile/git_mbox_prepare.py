@@ -96,13 +96,18 @@ class PatchSeries:
         self.patches = patches
         self.total = None
         self.coverletter = None
+        self.allow_partial_series = False
 
     def sanitize(self):
         checks = [
-            self._sanity_check_same_total,
             self._sanity_check_one_coverletter,
-            self._sanity_check_len_ok
         ]
+
+        if not self.allow_partial_series:
+            checks.extend(
+                [self._sanity_check_same_total,
+                 self._sanity_check_len_ok]
+            )
 
         for c in checks:
             ok, should_retry = c()
@@ -255,6 +260,9 @@ applying the patch can guide it through getting the right order."""
     parser.add_argument(
         "-i", "--interactive", help="Allow to interactively fixup patch subjects if mbox-prepare is not able to parse",
         action="store_true")
+    parser.add_argument(
+        "-t", "--allow-partial-series", help="Ignore sanity checks for total number of patches: this is a partial series",
+        action="store_true")
 
     group = parser.add_argument_group("Required arguments")
     group.add_argument("mbox", help="mbox file to process", metavar="MBOX_FILE")
@@ -284,6 +292,7 @@ def main(*cmd_args):
 
     retry = True
     series = PatchSeries(patches)
+    series.allow_partial_series = args.allow_partial_series
 
     while retry:
         ok, retry = series.sanitize()
