@@ -18,7 +18,7 @@ except ImportError:
     pass
 
 from .helpers import error, info, fatal
-from .helpers import parse_raw_diff, run_wrapper
+from .helpers import run_wrapper
 
 
 # external commands
@@ -449,17 +449,6 @@ def parse_commit_range(commit_range, pile_dir, default_end):
     return base, result
 
 
-def get_series_linenum_dict(d):
-    series = dict()
-    with open(op.join(d, "series"), "r") as f:
-        linenumber = 0
-        for l in f:
-            series[l[:-1]] = linenumber
-            linenumber += 1
-
-    return series
-
-
 def copy_sanitized_patch(p, outputdir):
     fn = op.join(outputdir, op.basename(p))
 
@@ -645,65 +634,86 @@ def cmd_format_patch(args):
     if not config.check_is_valid():
         return 1
 
-    # Allow the user to name the topic/feature branch as they please:
-    # default to whatever the HEAD is
-    # default to baseline..HEAD
-    base, result = parse_commit_range(args.commit_range, config.dir, "HEAD")
+    oldref = None
+    newref = None
 
-    with temporary_worktree(config.pile_branch, git_root()) as tmpdir:
-        ret = genpatches(tmpdir, base, result)
+    # accept git-range-diff like interval "old...new"
+    if len(args.refs) == 1:
+        r = args.refs[0].split("...")
+        if len(r) == 2:
+            args.refs = r
+
+    if len(args.refs) == 1:
+        try:
+            newref = git("symbolic-ref --short -q {ref}".format(ref=args.refs[0])).stdout.strip()
+            if not newref:
+                fatal("{ref} does not name a branch".format(ref=args.refs[0]))
+            oldref = git("rev-parse --abbrev-ref {ref}@{{u}}".format(ref=args.refs[0]),
+                         stderr=nul_f).stdout.strip()
+        except subprocess.CalledProcessError:
+            # git already gives error message
+            return 1
+    elif len(args.refs) == 2:
+        try:
+            oldref = git("rev-parse {ref}".format(ref=args.refs[0]), stderr=nul_f).stdout.strip()
+            newref = git("rev-parse {ref}".format(ref=args.refs[1]), stderr=nul_f).stdout.strip()
+        except subprocess.CalledProcessError:
+            if not oldref:
+                fatal("{ref} does not point to a valid ref".format(ref=args.refs[0]))
+            fatal("{ref} does not point to a valid ref".format(ref=args.refs[1]))
+    else:
+        fatal("could not parse arguments:", *args.refs)
+
+    commits = git("range-diff --no-color --no-patch {oldref}...{newref}".format(oldref=oldref, newref=newref)).stdout.split("\n")
+
+    # stat lines are in the form of
+    # 1:  34cf518f0aab ! 1:  3a4e12046539 <commit message>
+    # changed or added commits
+    ca_commits = []
+    for c in commits:
+        if not c:
+            continue
+        _, _, s, _, new_sha1, _ = c.split(maxsplit=5)
+        if s in "!>":
+            ca_commits += [(s, new_sha1)]
+
+    # get a simple diff of all the changes to attach to the coverletter. In future we actually
+    # want to attach the output of range-diff, but we still don't have na easy way to apply it.
+    root = git_root()
+    patchesdir = op.join(root, config.dir)
+    baseline = get_baseline(patchesdir)
+    with temporary_worktree(config.pile_branch, root) as tmpdir:
+        ret = genpatches(tmpdir, baseline, newref)
         if ret != 0:
             return 1
 
         git("-C %s add -A" % tmpdir)
-        baseline = get_baseline(config.dir)
         order_file = op.join(op.dirname(op.realpath(__file__)),
                              "data", "git-cover-order.txt")
+        diff = git(["-C", tmpdir, "diff", "--cached", "-p", '-O', order_file ]).stdout
+        if not diff:
+            fatal("Nothing changed from %s..%s to %s..%s"
+                    % (baseline, config.result_branch, baseline, newref))
 
-        with subprocess.Popen(["git", "-C", tmpdir, "diff", "--cached", "-p", "--raw", '-O', order_file ],
-                              stdout=subprocess.PIPE, universal_newlines=True) as proc:
-            # get a list of (state, new_name) tuples
-            changed_files = parse_raw_diff(proc.stdout)
-            # and finish reading all the diff
-            diff = proc.stdout.readlines()
-            if not diff:
-                fatal("Nothing changed from %s..%s to %s..%s"
-                      % (baseline, config.result_branch, base, result))
+    # From here on, use the real directory
+    output = args.output_directory
+    os.makedirs(output, exist_ok=True)
+    rm_patches(output)
 
-        patches = []
-        for action, fn in changed_files:
-            # deleted files will appear in the series file diff, we can skip them here
-            if action == 'D':
-                continue
+    try:
+        prefix = git("config --get format.subjectprefix").stdout.strip()
+    except subprocess.CalledProcessError:
+        prefix = "PATCH"
 
-            # only collect the patch files
-            if not fn.endswith(".patch"):
-                continue
+    total_patches = len(ca_commits)
+    cover = gen_cover_letter(diff, output, total_patches, baseline, prefix)
+    print(cover)
 
-            if action not in "RACMT":
-                fatal("Unknown state in diff '%s' for file '%s'" % (action, fn))
-
-            patches.append(fn)
-
-        series = get_series_linenum_dict(tmpdir)
-        patches.sort(key=lambda p: series.get(p, 0))
-
-        # From here on, use the real directory
-        output = args.output_directory
-        os.makedirs(output, exist_ok=True)
-        rm_patches(output)
-
-        try:
-            prefix = git("config --get format.subjectprefix").stdout.strip()
-        except subprocess.CalledProcessError:
-            prefix = "PATCH"
-
-        cover = gen_cover_letter(diff, output, len(patches), baseline, prefix)
-        print(cover)
-
-        for i, p in enumerate(patches):
-            old = op.join(tmpdir, p)
-            new = op.join(output, "%04d-%s" % (i + 1, p[5:]))
+    with tempfile.TemporaryDirectory() as d:
+        for i, c in enumerate(ca_commits):
+            old = git(["format-patch", "--subject-prefix=PATCH", "--zero-commit", "--signature=",
+                    "-o", d, "-N", "-1", c[1]]).stdout.strip()
+            new = op.join(output, "%04d-%s" % (i + 1, old[len(d) + 1 + 5:]))
 
             # Copy patches to the final output direcory fixing the Subject
             # lines to conform with the patch order and prefix
@@ -723,7 +733,7 @@ def cmd_format_patch(args):
                         # found the subject, re-format it
                         title = l[len(subject_header):]
                         newf.write("Subject: [{prefix} {i}/{n_patches}] {title}".format(
-                                   prefix=prefix, i=i + 1, n_patches=len(patches),
+                                   prefix=prefix, i=i + 1, n_patches=total_patches,
                                    title=title))
                         break
                     else:
@@ -977,11 +987,11 @@ series  config  X'.patch  Y'.patch  Z'.patch
         action="store_true",
         default=False)
     parser_format_patch.add_argument(
-        "commit_range",
-        help="Commit range to use for the generated patches (default: BASELINE..HEAD)",
-        metavar="COMMIT_RANGE",
-        nargs="?",
-        default="")
+        "refs",
+        help="New and (optionally) old branch used to decide the needed commits. Examples: 1) HEAD  or no arguments - the current branch and the upstream of the current branch will be used; 2) internal/staging staging - the staging branch on the internal remove is used as old branch while staging is used as new one; 3) internal/staging...staging - same as (2), but using the interval as accepted by git-range-diff. The diff appended in the coverletter is always the complete diff, BASELINE..NEWBRANCH",
+        metavar="REFS",
+        nargs="*",
+        default=["HEAD"])
     parser_format_patch.set_defaults(func=cmd_format_patch)
 
     # baseline
