@@ -27,6 +27,25 @@ git = run_wrapper('git', capture=True)
 
 nul_f = open(os.devnull, 'w')
 
+def assert_required_tools():
+    error_msg_git = "git >= 2.19 is needed, please check requirements"
+
+    # We need git range-diff from git >= 2.19. Instead of checking the version, let's try to check
+    # the feature we are interested in. We also have other requirements for using this version
+    # like worktree working properly. However that should be available on any version that has
+    # range-diff.
+    try:
+        exec_path = git("--exec-path").stdout.strip()
+    except subprocess.CalledProcessError:
+        fatal(error_msg_git)
+
+    path = os.getenv("PATH") + ":" + exec_path
+    if not shutil.which("git-range-diff", path=path):
+        # Let's be resilient to weird installations not having the symlink in place.
+        # For some reason "git range-diff -h" returns 129 rather than the usual 0
+        # ¯\_(ツ)_/¯
+        if git("range-diff -h", check=False, capture=False, stderr=nul_f).returncode != 129:
+            fatal(error_msg_git)
 
 class Config:
     def __init__(self):
@@ -221,6 +240,8 @@ def temporary_worktree(commit, dir, prefix=".git-pile-worktree"):
 
 
 def cmd_init(args):
+    assert_required_tools()
+
     try:
         base_commit = git("rev-parse %s" % args.baseline, stderr=nul_f).stdout.strip()
     except subprocess.CalledProcessError:
@@ -280,6 +301,8 @@ def cmd_init(args):
 
 
 def cmd_setup(args):
+    assert_required_tools()
+
     create_pile_branch = True
     create_result_branch = True
 
@@ -631,6 +654,8 @@ def cmd_genpatches(args):
 
 
 def cmd_format_patch(args):
+    assert_required_tools()
+
     config = Config()
     if not config.check_is_valid():
         return 1
