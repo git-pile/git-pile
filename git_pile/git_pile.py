@@ -980,7 +980,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
         "-o", "--output-directory",
         help="Use OUTPUT_DIR to store the resulting files instead of the CWD. This must be an empty/non-existent directory unless -f/--force is also used",
         metavar="OUTPUT_DIR",
-        default="")
+        default=".")
     parser_format_patch.add_argument(
         "-f", "--force",
         help="Force use of OUTPUT_DIR even if it has patches. The existent patches will be removed.",
