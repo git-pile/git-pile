@@ -12,13 +12,14 @@ import tempfile
 from contextlib import contextmanager
 from time import strftime
 
+from .helpers import error, info, fatal, warn
+from .helpers import run_wrapper
+
 try:
     import argcomplete
 except ImportError:
+    warn("can't find python3-argcomplete: argument completion won't be available")
     pass
-
-from .helpers import error, info, fatal
-from .helpers import run_wrapper
 
 
 # external commands
