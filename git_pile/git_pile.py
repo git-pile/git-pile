@@ -660,10 +660,14 @@ def cmd_format_patch(args):
     if not config.check_is_valid():
         return 1
 
+    oldbaseline = None
+    newbaseline = None
     oldref = None
     newref = None
+    root = git_root()
+    patchesdir = op.join(root, config.dir)
 
-    # accept git-range-diff like interval "old...new"
+    # Parse ranges from command line
     if len(args.refs) == 1:
         r = args.refs[0].split("...")
         if len(r) == 2:
@@ -679,18 +683,37 @@ def cmd_format_patch(args):
         except subprocess.CalledProcessError:
             # git already gives error message
             return 1
+
+        oldbaseline = get_baseline(patchesdir)
+        newbaseline = oldbaseline
     elif len(args.refs) == 2:
-        try:
-            oldref = git("rev-parse {ref}".format(ref=args.refs[0]), stderr=nul_f).stdout.strip()
-            newref = git("rev-parse {ref}".format(ref=args.refs[1]), stderr=nul_f).stdout.strip()
-        except subprocess.CalledProcessError:
-            if not oldref:
-                fatal("{ref} does not point to a valid ref".format(ref=args.refs[0]))
-            fatal("{ref} does not point to a valid ref".format(ref=args.refs[1]))
+        r1 = args.refs[0].split("..")
+        r2 = args.refs[1].split("..")
+        if len(r1) == len(r2) and len(r1) == 2:
+            try:
+                oldbaseline = git("rev-parse {ref}".format(ref=r1[0]), stderr=nul_f).stdout.strip()
+                newbaseline = git("rev-parse {ref}".format(ref=r2[0]), stderr=nul_f).stdout.strip()
+                oldref = git("rev-parse {ref}".format(ref=r1[1]), stderr=nul_f).stdout.strip()
+                newref = git("rev-parse {ref}".format(ref=r2[1]), stderr=nul_f).stdout.strip()
+            except subprocess.CalledProcessError:
+                if not oldbaseline or not newbaseline:
+                    fatal("{ref} does not point to a valid range".format(ref=r1))
+                fatal("{ref} does not point to a valid range".format(ref=r2))
+        else:
+            try:
+                oldref = git("rev-parse {ref}".format(ref=args.refs[0]), stderr=nul_f).stdout.strip()
+                newref = git("rev-parse {ref}".format(ref=args.refs[1]), stderr=nul_f).stdout.strip()
+            except subprocess.CalledProcessError:
+                if not oldref:
+                    fatal("{ref} does not point to a valid ref".format(ref=args.refs[0]))
+                fatal("{ref} does not point to a valid ref".format(ref=args.refs[1]))
+            oldbaseline = get_baseline(patchesdir)
+            newbaseline = oldbaseline
     else:
         fatal("could not parse arguments:", *args.refs)
 
-    commits = git("range-diff --no-color --no-patch {oldref}...{newref}".format(oldref=oldref, newref=newref)).stdout.split("\n")
+    commits = git("range-diff --no-color --no-patch {oldbaseline}..{oldref} {newbaseline}..{newref}".format(
+            oldbaseline=oldbaseline, newbaseline=newbaseline, oldref=oldref, newref=newref)).stdout.split("\n")
 
     # stat lines are in the form of
     # 1:  34cf518f0aab ! 1:  3a4e12046539 <commit message>
@@ -704,12 +727,9 @@ def cmd_format_patch(args):
             ca_commits += [(s, new_sha1)]
 
     # get a simple diff of all the changes to attach to the coverletter. In future we actually
-    # want to attach the output of range-diff, but we still don't have na easy way to apply it.
-    root = git_root()
-    patchesdir = op.join(root, config.dir)
-    baseline = get_baseline(patchesdir)
+    # want to attach the output of range-diff, but we still don't have an easy way to apply it.
     with temporary_worktree(config.pile_branch, root) as tmpdir:
-        ret = genpatches(tmpdir, baseline, newref)
+        ret = genpatches(tmpdir, newbaseline, newref)
         if ret != 0:
             return 1
 
@@ -732,7 +752,7 @@ def cmd_format_patch(args):
         prefix = "PATCH"
 
     total_patches = len(ca_commits)
-    cover = gen_cover_letter(diff, output, total_patches, baseline, prefix)
+    cover = gen_cover_letter(diff, output, total_patches, newbaseline, prefix)
     print(cover)
 
     with tempfile.TemporaryDirectory() as d:
@@ -1001,20 +1021,40 @@ series  config  X'.patch  Y'.patch  Z'.patch
     parser_genbranch.set_defaults(func=cmd_genbranch)
 
     # format-patch
-    parser_format_patch = subparsers.add_parser('format-patch', help="Generate patches from BASELINE..HEAD and save patch series to output directory to be shared on a mailing list")
+    parser_format_patch = subparsers.add_parser('format-patch', help="Generate patches from BASELINE..HEAD and save patch series to output directory to be shared on a mailing list",
+        formatter_class=argparse.RawTextHelpFormatter)
     parser_format_patch.add_argument(
         "-o", "--output-directory",
-        help="Use OUTPUT_DIR to store the resulting files instead of the CWD. This must be an empty/non-existent directory unless -f/--force is also used",
+        help="Use OUTPUT_DIR to store the resulting files instead of the CWD. This must be an\n"
+             "empty/non-existent directory unless -f/--force is also used",
         metavar="OUTPUT_DIR",
         default=".")
     parser_format_patch.add_argument(
         "-f", "--force",
-        help="Force use of OUTPUT_DIR even if it has patches. The existent patches will be removed.",
+        help="Force use of OUTPUT_DIR even if it has patches. The existent patches will be\n"
+             "removed.",
         action="store_true",
         default=False)
     parser_format_patch.add_argument(
         "refs",
-        help="New and (optionally) old branch used to decide the needed commits. Examples: 1) HEAD  or no arguments - the current branch and the upstream of the current branch will be used; 2) internal/staging staging - the staging branch on the internal remove is used as old branch while staging is used as new one; 3) internal/staging...staging - same as (2), but using the interval as accepted by git-range-diff. The diff appended in the coverletter is always the complete diff, BASELINE..NEWBRANCH",
+        help="""
+Same arguments as the ones received by range-diff in its several forms plus a
+shortcut. From more verbose to the easiest ones:
+1) OLD_BASELINE..OLD_RESULT_HEAD NEW_BASELINE..NEW_RESULT_HEAD
+    This should be used when rebasing the RESULT_BRANCH and thus having
+    different baselines
+
+2) OLD_RESULT_HEAD...NEW_RESULT_HEAD or OLD_RESULT_HEAD NEW_RESULT_HEAD
+    This assumes the baseline remained the same. In the first form, the
+    same as used by git-range-diff, note the triple dots rather than double.
+
+3) OLD_RESULT_HEAD NEW_RESULT_HEAD
+    Same as (2)
+
+3) HEAD or no arguments
+    This is a shortcut: the current branch will be used as NEW_RESULT_HEAD and
+    the upstream of this branch as OLD_RESULT_HEAD. Example: if RESULT_BRANCH
+    is internal, this is equivalent to: internal@{u}...internal""",
         metavar="REFS",
         nargs="*",
         default=["HEAD"])
