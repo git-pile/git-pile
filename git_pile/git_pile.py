@@ -436,13 +436,19 @@ def fix_duplicate_patch_names(patches):
 
 
 def generate_series_list(commit_range):
-    series = git(["log", "--format=%f", "--reverse", commit_range]).stdout.strip().split("\n")
+    if ".." in commit_range:
+        single_arg = []
+    else:
+        single_arg = ["-1"]
+
+    series = git(["log", "--format=%f", "--reverse", *single_arg, commit_range]).stdout.strip().split("\n")
     # truncate name as per output of git-format-patch
     series = [x[0:52] for x in series]
     series = fix_duplicate_patch_names(series)
     # add 0001 and .patch prefix/suffix
     series = ["0001-{name}.patch".format(name=x) for x in series]
-    return series
+
+    return series if not single_arg else series[0]
 
 
 def rm_patches(dest):
