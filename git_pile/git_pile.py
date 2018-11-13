@@ -768,7 +768,7 @@ def cmd_format_patch(args):
         git("-C %s add -A" % tmpdir)
         order_file = op.join(op.dirname(op.realpath(__file__)),
                              "data", "git-cover-order.txt")
-        diff = git(["-C", tmpdir, "diff", "--cached", "-p", '-O', order_file, "--",
+        diff = git(["-C", tmpdir, "diff", "--cached", "-p", "--stat", '-O', order_file, "--",
                     *diff_filter_list]).stdout
         if not diff:
             fatal("Nothing changed from %s..%s to %s..%s"
