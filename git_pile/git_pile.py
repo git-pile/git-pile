@@ -730,7 +730,7 @@ def cmd_format_patch(args):
     else:
         fatal("could not parse arguments:", *args.refs)
 
-    commits = git("range-diff --no-color --no-patch {oldbaseline}..{oldref} {newbaseline}..{newref}".format(
+    range_diff_commits = git("range-diff --no-color --no-patch {oldbaseline}..{oldref} {newbaseline}..{newref}".format(
             oldbaseline=oldbaseline, newbaseline=newbaseline, oldref=oldref, newref=newref)).stdout.split("\n")
 
     # stat lines are in the form of
@@ -739,7 +739,7 @@ def cmd_format_patch(args):
     c_commits = []
     a_commits = []
     d_commits = []
-    for c in commits:
+    for c in range_diff_commits:
         if not c:
             continue
 
@@ -785,7 +785,7 @@ def cmd_format_patch(args):
 
     ca_commits = c_commits + a_commits
     total_patches = len(ca_commits)
-    cover = gen_cover_letter(diff, output, total_patches, newbaseline, prefix)
+    cover = gen_cover_letter(diff, output, total_patches, newbaseline, prefix, range_diff_commits)
     print(cover)
 
     with tempfile.TemporaryDirectory() as d:
