@@ -736,16 +736,30 @@ def cmd_format_patch(args):
     # stat lines are in the form of
     # 1:  34cf518f0aab ! 1:  3a4e12046539 <commit message>
     # changed or added commits
-    ca_commits = []
+    c_commits = []
+    a_commits = []
+    d_commits = []
     for c in commits:
         if not c:
             continue
-        _, _, s, _, new_sha1, _ = c.split(maxsplit=5)
-        if s in "!>":
-            ca_commits += [(old_sha1, new_sha1)]
 
-    # get a simple diff of all the changes to attach to the coverletter. In future we actually
-    # want to attach the output of range-diff, but we still don't have an easy way to apply it.
+        _, old_sha1, s, _, new_sha1, _ = c.split(maxsplit=5)
+        if s == "!":
+            c_commits += [(old_sha1, new_sha1)]
+        elif s == ">":
+            a_commits += [(old_sha1, new_sha1)]
+        elif s == "<":
+            d_commits += [(old_sha1, new_sha1)]
+
+    diff_filter_list = ["series", "config"]
+    diff_filter_list += [generate_series_list(x[1]) for x in a_commits]
+    diff_filter_list += [generate_series_list(x[0]) for x in c_commits]
+    diff_filter_list += [generate_series_list(x[1]) for x in c_commits]
+    diff_filter_list += [generate_series_list(x[0]) for x in d_commits]
+    diff_filter_list = list(set(diff_filter_list))
+
+    # get a simple diff of all the changes to attach to the coverletter filtered by the
+    # output of git-range-diff
     with temporary_worktree(config.pile_branch, root) as tmpdir:
         ret = genpatches(tmpdir, newbaseline, newref)
         if ret != 0:
@@ -754,12 +768,12 @@ def cmd_format_patch(args):
         git("-C %s add -A" % tmpdir)
         order_file = op.join(op.dirname(op.realpath(__file__)),
                              "data", "git-cover-order.txt")
-        diff = git(["-C", tmpdir, "diff", "--cached", "-p", '-O', order_file ]).stdout
+        diff = git(["-C", tmpdir, "diff", "--cached", "-p", '-O', order_file, "--",
+                    *diff_filter_list]).stdout
         if not diff:
             fatal("Nothing changed from %s..%s to %s..%s"
                     % (baseline, config.result_branch, baseline, newref))
 
-    # From here on, use the real directory
     output = args.output_directory
     os.makedirs(output, exist_ok=True)
     rm_patches(output)
@@ -769,6 +783,7 @@ def cmd_format_patch(args):
     except subprocess.CalledProcessError:
         prefix = "PATCH"
 
+    ca_commits = c_commits + a_commits
     total_patches = len(ca_commits)
     cover = gen_cover_letter(diff, output, total_patches, newbaseline, prefix)
     print(cover)
