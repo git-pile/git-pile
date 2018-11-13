@@ -602,11 +602,15 @@ def genpatches(output, base_commit, result_commit):
     return 0
 
 
-def gen_cover_letter(diff, output, n_patches, baseline, prefix):
+def gen_cover_letter(diff, output, n_patches, baseline, prefix, range_diff_commits):
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
     now = strftime("%a, %d %b %Y %T %z")
+
+    # 1:  34cf518f0aab ! 1:  3a4e12046539 <commit message>
+    # Let only the lines with state == !, < or >
+    reduced_range_diff = "\n".join(list(filter(lambda x: x and x.split(maxsplit=3)[2] in "!><", range_diff_commits)))
 
     cover = op.join(output, "0000-cover-letter.patch")
     with open(cover, "w") as f:
@@ -624,7 +628,12 @@ Content-Transfer-Encoding: 8bit
 Changes below are based on current pile tree with
 BASELINE={baseline}
 
-""".format(user=user, email=email, date=now, n_patches=n_patches, baseline=baseline, prefix=prefix))
+Reduced git-range-diff output:
+{range_diff}
+
+""".format(user=user, email=email, date=now, n_patches=n_patches, baseline=baseline, prefix=prefix,
+           range_diff=reduced_range_diff))
+
         for l in diff:
             f.write(l)
 
