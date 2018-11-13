@@ -772,7 +772,7 @@ def cmd_format_patch(args):
                     *diff_filter_list]).stdout
         if not diff:
             fatal("Nothing changed from %s..%s to %s..%s"
-                    % (baseline, config.result_branch, baseline, newref))
+                    % (oldbaseline, config.result_branch, newbaseline, newref))
 
     output = args.output_directory
     os.makedirs(output, exist_ok=True)
