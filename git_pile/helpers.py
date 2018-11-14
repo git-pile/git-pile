@@ -47,10 +47,11 @@ class run_wrapper:
         else:
             l = s
 
-        ret = subprocess.run([self.cmd] + l, *args, **kwargs)
+        l.insert(0, self.cmd)
+        ret = subprocess.run(l, *args, **kwargs)
 
         if self.print_error_as_ignored and ret.returncode != 0:
-            print("Ignoring failed command: '%s %s'" % (self.cmd, " ".join(l)))
+            print("Ignoring failed command: '%s'" % " ".join(l))
             print("\t", ret.stderr, end="", file=sys.stderr)
 
         return ret
