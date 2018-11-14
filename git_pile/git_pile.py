@@ -503,26 +503,22 @@ def copy_sanitized_patch(p, outputdir):
                 # index must be maintained otherwise it's not possible to
                 # reconstruct the branch
                 hunk_header = []
-                index_line = 0
+                index_line = -1
                 is_binary = False
                 for l in it:
+                    hunk_header.append(l)
                     if l.startswith("@@"):
                         break
                     if l.startswith("GIT binary patch"):
                         is_binary = True
                         break
                     if l.startswith("index"):
-                        index_line = len(hunk_header)
+                        index_line = len(hunk_header) - 1
 
-                    hunk_header.append(l)
-                else:
-                    fatal("malformed patch %s\n" % p)
-
-                if not is_binary:
+                if not is_binary and index_line >= 0:
                     hunk_header.pop(index_line)
 
                 newf.writelines(hunk_header)
-                newf.write(l)
 
                 for l in it:
                     newf.write(l)
