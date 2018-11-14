@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from time import strftime
 
 from .helpers import error, info, fatal, warn
-from .helpers import run_wrapper
+from .helpers import run_wrapper, set_debugging
 
 try:
     import argcomplete
@@ -1028,6 +1028,14 @@ series  config  X'.patch  Y'.patch  Z'.patch
     parser_destroy = subparsers.add_parser('destroy', help="Destroy all git-pile on this repo")
     parser_destroy.set_defaults(func=cmd_destroy)
 
+
+    # add options to all subparsers
+    for _, subp in subparsers.choices.items():
+        subp.add_argument(
+            "--debug",
+            help="Turn on debugging output",
+            action="store_true", default=False)
+
     try:
         argcomplete.autocomplete(parser)
     except NameError:
@@ -1037,6 +1045,9 @@ series  config  X'.patch  Y'.patch  Z'.patch
     if not hasattr(args, "func"):
         parser.print_help()
         return None
+
+    if args.debug:
+        set_debugging(True)
 
     return args
 
