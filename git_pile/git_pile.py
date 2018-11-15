@@ -742,7 +742,7 @@ def cmd_format_patch(args):
             continue
         _, _, s, _, new_sha1, _ = c.split(maxsplit=5)
         if s in "!>":
-            ca_commits += [new_sha1]
+            ca_commits += [(old_sha1, new_sha1)]
 
     # get a simple diff of all the changes to attach to the coverletter. In future we actually
     # want to attach the output of range-diff, but we still don't have an easy way to apply it.
@@ -776,7 +776,7 @@ def cmd_format_patch(args):
     with tempfile.TemporaryDirectory() as d:
         for i, c in enumerate(ca_commits):
             old = git(["format-patch", "--subject-prefix=PATCH", "--zero-commit", "--signature=",
-                    "-o", d, "-N", "-1", c]).stdout.strip()
+                    "-o", d, "-N", "-1", c[1]]).stdout.strip()
             new = op.join(output, "%04d-%s" % (i + 1, old[len(d) + 1 + 5:]))
 
             # Copy patches to the final output direcory fixing the Subject
