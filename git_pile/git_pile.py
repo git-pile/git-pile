@@ -431,6 +431,8 @@ def fix_duplicate_patch_names(patches):
             if retry > max_retries:
                 raise Exception("wat!?! '%s' (max_retries=%d)" % (p, max_retries))
             newp = p + "-%d" % retry
+            retry += 1
+
         ret.append(newp)
     return ret
 
