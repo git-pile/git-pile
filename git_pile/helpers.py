@@ -2,9 +2,15 @@
 # SPDX-License-Identifier: LGPL-2.1+
 
 import os
+import shlex
 import subprocess
 import sys
 
+debug_run = False
+
+def set_debugging(val):
+    global debug_run
+    debug_run = val
 
 class run_wrapper:
     def __init__(self, cmd, env_default=None, capture=False, check=True, print_error_as_ignored=False):
@@ -47,10 +53,16 @@ class run_wrapper:
         else:
             l = s
 
-        ret = subprocess.run([self.cmd] + l, *args, **kwargs)
+        l.insert(0, self.cmd)
+
+        cmd_debug = ' '.join(shlex.quote(x) for x in l)
+        if debug_run:
+            print('+ ' + cmd_debug, file=sys.stderr)
+
+        ret = subprocess.run(l, *args, **kwargs)
 
         if self.print_error_as_ignored and ret.returncode != 0:
-            print("Ignoring failed command: '%s %s'" % (self.cmd, " ".join(l)))
+            print("Ignoring failed command: '{}'".format(cmd_debug))
             print("\t", ret.stderr, end="", file=sys.stderr)
 
         return ret
