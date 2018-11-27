@@ -624,12 +624,9 @@ Content-Transfer-Encoding: 8bit
 *** BLURB HERE ***
 
 ---
-Changes below are based on current pile tree with
-BASELINE={baseline}
-
+baseline: {baseline}
 pile-commit: {pile_commit}
-
-Reduced git-range-diff output:
+range-diff:
 {range_diff}
 
 """.format(user=user, email=email, date=now, n_patches=n_patches, baseline=baseline, pile_commit=pile_commit, prefix=prefix,
