@@ -91,15 +91,15 @@ def info(s, *args, **kwargs):
 
 def fatal(s, *args, **kwargs):
     kwargs.setdefault("file", sys.stderr)
-    print("fatal: ", s, *args, **kwargs)
+    print("fatal:", s, *args, **kwargs)
     sys.exit(1)
 
 
 def error(s, *args, **kwargs):
     kwargs.setdefault("file", sys.stderr)
-    print("error: ", s, *args, **kwargs)
+    print("error:", s, *args, **kwargs)
 
 
 def warn(s, *args, **kwargs):
     kwargs.setdefault("file", sys.stderr)
-    print("warning: ", s, *args, **kwargs)
+    print("warning:", s, *args, **kwargs)
