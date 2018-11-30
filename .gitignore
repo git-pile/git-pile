@@ -26,3 +26,5 @@ develop-eggs
 
 ## Installer logs
 pip-log.txt
+
+/git-pile-wrapper-*
