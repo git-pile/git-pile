@@ -3,6 +3,7 @@
 
 from os import path as op
 from setuptools import setup
+from git_pile import __version__
 import os
 import sys
 
@@ -19,7 +20,7 @@ else:
 
 setup(
     name="git-pile",
-    version="0",
+    version=__version__,
     description="Manage a pile of patches on top of git branches",
     url="FIXME",
     maintainer="git-pile contributors",
