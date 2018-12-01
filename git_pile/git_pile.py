@@ -885,17 +885,28 @@ def cmd_baseline(args):
 
     return 0
 
-# Temporary command to help with development
+
 def cmd_destroy(args):
     config = Config()
 
-    git_ = run_wrapper('git', capture=True, check=False, print_error_as_ignored=True)
-    if config.dir:
-        git_("worktree remove --force %s" % config.dir)
-    git_("branch -D %s" % config.pile_branch)
+    # everything here is relative to root
+    os.chdir(git_root())
 
-    # implode
-    git_("config --remove-section pile")
+    # implode - we have the cached values saved in config
+    if git("config --remove-section pile", check=False, stderr=nul_f).returncode != 0:
+        fatal("pile not initialized")
+
+    git_ = run_wrapper('git', capture=True, check=False, print_error_as_ignored=True)
+    rm_ = run_wrapper('rm', capture=True, check=False, print_error_as_ignored=True)
+
+    if config.dir and op.exists(config.dir):
+        git_("worktree remove --force {d}".format(d=config.dir))
+        rm_("-rf {d}".format(d=config.dir))
+
+    git_("worktree prune")
+
+    if config.pile_branch:
+        git_("branch -D {d}".format(d=config.pile_branch))
 
 
 def parse_args(cmd_args):
