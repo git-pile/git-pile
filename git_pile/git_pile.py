@@ -635,6 +635,8 @@ range-diff:
         for l in diff:
             f.write(l)
 
+        f.write("--\ngit-pile {version}\n\n".format(version=__version__))
+
     return cover
 
 
