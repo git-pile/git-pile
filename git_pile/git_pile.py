@@ -747,17 +747,20 @@ def cmd_format_patch(args):
     c_commits = []
     a_commits = []
     d_commits = []
+    n = 1
     for c in range_diff_commits:
         if not c:
             continue
 
         _, old_sha1, s, _, new_sha1, _ = c.split(maxsplit=5)
         if s == "!":
-            c_commits += [(old_sha1, new_sha1)]
+            c_commits += [(old_sha1, new_sha1, n)]
         elif s == ">":
-            a_commits += [(old_sha1, new_sha1)]
+            a_commits += [(old_sha1, new_sha1, n)]
         elif s == "<":
-            d_commits += [(old_sha1, new_sha1)]
+            d_commits += [(old_sha1, new_sha1, n)]
+
+        n += 1
 
     diff_filter_list = ["series", "config"]
     diff_filter_list += [generate_series_list(x[1]) for x in a_commits]
@@ -792,6 +795,7 @@ def cmd_format_patch(args):
         prefix = "PATCH"
 
     ca_commits = c_commits + a_commits
+    ca_commits.sort(key=lambda x: x[2])
     total_patches = len(ca_commits)
     cover = gen_cover_letter(diff, output, total_patches, newbaseline, prefix, range_diff_commits)
     print(cover)
