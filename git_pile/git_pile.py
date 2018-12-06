@@ -601,7 +601,7 @@ def genpatches(output, base_commit, result_commit):
     return 0
 
 
-def gen_cover_letter(diff, output, n_patches, baseline, prefix, range_diff_commits):
+def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, prefix, range_diff_commits):
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
@@ -624,17 +624,18 @@ Content-Transfer-Encoding: 8bit
 *** BLURB HERE ***
 
 ---
-Changes below are based on current pile tree with
-BASELINE={baseline}
-
-Reduced git-range-diff output:
+baseline: {baseline}
+pile-commit: {pile_commit}
+range-diff:
 {range_diff}
 
-""".format(user=user, email=email, date=now, n_patches=n_patches, baseline=baseline, prefix=prefix,
+""".format(user=user, email=email, date=now, n_patches=n_patches, baseline=baseline, pile_commit=pile_commit, prefix=prefix,
            range_diff=reduced_range_diff))
 
         for l in diff:
             f.write(l)
+
+        f.write("--\ngit-pile {version}\n\n".format(version=__version__))
 
     return cover
 
@@ -793,7 +794,9 @@ def cmd_format_patch(args):
 
     ca_commits = c_commits + a_commits
     total_patches = len(ca_commits)
-    cover = gen_cover_letter(diff, output, total_patches, newbaseline, prefix, range_diff_commits)
+    cover = gen_cover_letter(diff, output, total_patches, newbaseline,
+                             git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
+                             prefix, range_diff_commits)
     print(cover)
 
     with tempfile.TemporaryDirectory() as d:
