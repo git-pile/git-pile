@@ -6,4 +6,4 @@ function _git_pile() {
         _python_argcomplete_global git-pile;
     fi
 }
-complete -o default -o bashdefault -D -F _git_pile git-pile
+complete -o default -o bashdefault -F _git_pile git-pile
