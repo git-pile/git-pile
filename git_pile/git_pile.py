@@ -701,15 +701,18 @@ def cmd_format_patch(args):
             args.refs = r
 
     if len(args.refs) == 1:
-        try:
-            newref = git("symbolic-ref --short -q {ref}".format(ref=args.refs[0])).stdout.strip()
+        # Single branch name or "HEAD": the branch needs the upstream to be set in order to work
+        if git_branch_exists(args.refs[0]):
+            newref = args.refs[0]
+        else:
+            newref = git("symbolic-ref --short -q {ref}".format(ref=args.refs[0]), check=False).stdout.strip()
             if not newref:
-                fatal("{ref} does not name a branch".format(ref=args.refs[0]))
-            oldref = git("rev-parse --abbrev-ref {ref}@{{u}}".format(ref=args.refs[0]),
-                         stderr=nul_f).stdout.strip()
-        except subprocess.CalledProcessError:
-            # git already gives error message
-            return 1
+                fatal("'{ref}' does not name a branch".format(ref=args.refs[0]))
+
+        # use upstream of this branch as the old ref
+        oldref = git("rev-parse --abbrev-ref {ref}@{{u}}".format(ref=args.refs[0]), stderr=nul_f, check=False).stdout.strip()
+        if not oldref:
+            fatal("'{ref}' does not have an upstream. Either set with 'git branch --set-upstream-to'\nor pass old and new branches explicitly (e.g repo/internal...my-new-branch))".format(ref=args.refs[0]))
 
         oldbaseline = get_baseline(patchesdir)
         newbaseline = oldbaseline
