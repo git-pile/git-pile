@@ -22,6 +22,7 @@ else:
 
 setup(
     name="git-pile",
+    zip_safe = False,
     version=__version__,
     description="Manage a pile of patches on top of git branches",
     url="FIXME",
