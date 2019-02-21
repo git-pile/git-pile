@@ -1162,4 +1162,9 @@ def main(*cmd_args):
     if not args:
         return 1
 
-    return args.func(args)
+    try:
+        return args.func(args)
+    except KeyboardInterrupt:
+        return 130
+
+    return 1
