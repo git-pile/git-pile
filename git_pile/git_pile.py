@@ -764,6 +764,10 @@ def cmd_am(args):
         return 1
 
     info("Entering '%s' directory" % config.dir)
+
+    if args.strategy == "pile-commit":
+        git(["-C", patchesdir, "reset", "--hard", cover.pile_commit])
+
     with subprocess.Popen(["git", "-C", patchesdir, "am", "-3"],
             stdin=subprocess.PIPE, universal_newlines=True) as proc:
         cover.dump(proc.stdin)
@@ -1244,6 +1248,16 @@ shortcut. From more verbose to the easiest ones:
         "assumed to be the cover. "
         "If no arguments are passed, the mbox is read from stdin",
         nargs="?")
+    parser_am.add_argument(
+        "-s", "--strategy",
+        help="Select the strategy used to apply the patch. \"top\", the default, "
+             "tries to apply the patch on top of PILE_BRANCH. \"pile-commit\" "
+             "first reset the pile branch to the commit saved in the cover "
+             "letter before proceeding - this allows to replicate the "
+             "exact same tree as the one that generated the cover. However "
+             "the PILE_BRANCH will have diverged.",
+        choices=["top", "pile-commit"],
+        default="top")
     parser_am.set_defaults(func=cmd_am)
 
     # baseline
