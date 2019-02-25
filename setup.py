@@ -43,7 +43,8 @@ setup(
     ]},
     data_files=[
         (bash_completion_dir, ['extra/git-pile-complete.sh']),
-        (op.join(mandir, 'man1'), ['man/git-pile-baseline.1',
+        (op.join(mandir, 'man1'), ['man/git-pile-am.1',
+                            'man/git-pile-baseline.1',
                             'man/git-pile-destroy.1',
                             'man/git-pile-format-patch.1',
                             'man/git-pile-genbranch.1',

@@ -2,7 +2,7 @@ NOSETESTS := $(shell command -v nosetests-3 || command -v nosetests)
 MKDIR_P := mkdir -p
 
 SUBCMDS_NOHELP = init
-SUBCMDS = setup genpatches genbranch format-patch baseline destroy
+SUBCMDS = setup genpatches genbranch format-patch baseline destroy am
 MAN_PAGES = $(addprefix git-pile-, $(addsuffix .1, $(SUBCMDS)))
 
 pycheck:
