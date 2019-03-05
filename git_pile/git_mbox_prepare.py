@@ -263,6 +263,10 @@ applying the patch can guide it through getting the right order."""
     parser.add_argument(
         "-t", "--allow-partial-series", help="Ignore sanity checks for total number of patches: this is a partial series",
         action="store_true")
+    parser.add_argument(
+        "-k", "--keep-headers", help="Keep all headers from the input mbox",
+        action="store_true",
+        default=False)
 
     group = parser.add_argument_group("Required arguments")
     group.add_argument("mbox", help="mbox file to process", metavar="MBOX_FILE")
@@ -272,6 +276,32 @@ applying the patch can guide it through getting the right order."""
     except NameError:
         pass
     args = parser.parse_args(cmd_args)
+
+
+def write_patch(f, p):
+    if p.encoding:
+        payload = p.msg.get_payload(decode=True).decode(p.encoding)
+    else:
+        payload = p.msg.get_payload()
+
+    msg_from = p.msg.get_from() or "0000000000000000000000000000000000000000"
+
+    if not args.keep_headers:
+        f.write("""From %s
+From: %s
+Date: %s
+Subject: [PATCH] %s
+
+""" % (msg_from, p.msg["from"], p.msg["date"], p.title))
+    else:
+        f.write("From %s\n" % msg_from)
+        for k, v in zip(p.msg.keys(), p.msg.values()):
+            if k.lower() == "subject":
+                v = p.title
+            f.write("%s: %s\n" % (k, v))
+        f.write("\n")
+
+    f.write(payload)
 
 
 def main(*cmd_args):
@@ -312,19 +342,9 @@ def main(*cmd_args):
         fn = "%04d-%s" % (idx, p.filename)
         fn = os.path.join(args.output, fn)
 
-        if p.encoding:
-            payload = p.msg.get_payload(decode=True).decode(p.encoding)
-        else:
-            payload = p.msg.get_payload()
-
         with open(fn, "w") as f:
-            f.write("""From 0000000000000000000000000000000000000000
-From: %s
-Date: %s
-Subject: [PATCH] %s
+            write_patch(f, p)
 
-""" % (p.msg["from"], p.msg["date"], p.title))
-            f.write(payload)
         print(fn)
         idx += 1
 
