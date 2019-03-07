@@ -321,7 +321,7 @@ def cmd_setup(args):
             # allow case that e.g. 'origin/pile' and 'pile' point to the same commit
             if git("rev-parse %s" % args.pile_branch).stdout == git("rev-parse %s" % local_pile_branch).stdout:
                 create_pile_branch = False
-            else:
+            elif not args.force:
                 fatal("using '%s' for pile but branch '%s' already exists and point elsewhere" % (args.pile_branch, local_pile_branch))
     elif git_branch_exists(args.pile_branch):
         local_pile_branch = args.pile_branch
@@ -343,7 +343,7 @@ def cmd_setup(args):
             # allow case that e.g. 'origin/internal' and 'internal' point to the same commit
             if git("rev-parse %s" % result_branch).stdout == git("rev-parse %s" % local_result_branch).stdout:
                 create_result_branch = False
-            else:
+            elif not args.force:
                 fatal("using '%s' for result but branch '%s' already exists and point elsewhere" % (result_branch, local_result_branch))
     elif git_branch_exists(result_branch):
         local_result_branch = result_branch
@@ -384,10 +384,15 @@ def cmd_setup(args):
     # fuzzy-tested, try to do the useful work
     if create_pile_branch:
         info("Creating branch %s" % local_pile_branch)
-        git("branch -t %s %s" % (local_pile_branch, args.pile_branch))
+        force_arg = "-f" if args.force else ""
+        git("branch %s -t %s %s" % (force_arg, local_pile_branch, args.pile_branch))
     if create_result_branch:
         info("Creating branch %s" % local_result_branch)
-        git("branch -t %s %s" % (local_result_branch, result_branch))
+        if not path:
+            git("branch %s -t %s %s" % (force_arg, local_result_branch, result_branch))
+        else:
+            git("-C %s reset --hard %s" % (path, result_branch), stdout=nul_f, stderr=nul_f)
+
 
     if need_worktree:
         # checkout pile branch as a new worktree
@@ -1126,6 +1131,11 @@ series  config  X'.patch  Y'.patch  Z'.patch
         help="Directory in which to place patches - same argument as for git-pile init (default: %(default)s)",
         metavar="DIR",
         default="patches")
+    parser_setup.add_argument(
+        "-f", "--force",
+        help="Always create RESULT_BRANCH, even if it's checked out in any path",
+        action="store_true",
+        default=False)
     parser_setup.add_argument("pile_branch",
         help="Remote or local branch used to store the physical patch files. "
              "In case a remote branch is passed, a local one will be created "
