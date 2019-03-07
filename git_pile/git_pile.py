@@ -55,7 +55,7 @@ class Config:
         self.result_branch = ""
         self.pile_branch = ""
 
-        s = git(["config", "--get-regex", "pile\\.*"], check=False, stderr=nul_f).stdout.strip()
+        s = git(["config", "--get-regexp", "^pile\\.*"], check=False, stderr=nul_f).stdout.strip()
         if not s:
             return
 
