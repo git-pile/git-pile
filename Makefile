@@ -18,10 +18,10 @@ git-pile-%.1: FORCE
 	@$(MKDIR_P) man
 	@echo -e "#!/bin/bash\nexec ./git-pile $* \"\$$@\"" > git-pile-wrapper-$*
 	@chmod +x git-pile-wrapper-$*
-	help2man -n "git pile $*" -N -s 1 --no-discard-stderr ./git-pile-wrapper-$* > man/$@
+	help2man -n "git pile $*" -N -s 1 --no-discard-stderr ./git-pile-wrapper-$* > man/man1/$@
 	@rm git-pile-wrapper-$*
 
 man: $(MAN_PAGES)
-	help2man -n "git pile" -N -s 1 --no-discard-stderr ./git-pile > man/git-pile.1
+	help2man -n "git pile" -N -s 1 --no-discard-stderr ./git-pile > man/man1/git-pile.1
 
 .PHONY: all pycheck check man
