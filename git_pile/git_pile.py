@@ -771,7 +771,9 @@ def cmd_am(args):
     info("Entering '%s' directory" % config.dir)
 
     if args.strategy == "pile-commit":
-        git(["-C", patchesdir, "reset", "--hard", cover.pile_commit])
+        if git(["-C", patchesdir, "reset", "--hard", cover.pile_commit], check=False).returncode != 0:
+            print("Could not checkout commit %s\n as baseline - you probably need to git-fetch it." % cover.pile_commit,
+                  file=sys.stderr)
 
     with subprocess.Popen(["git", "-C", patchesdir, "am", "-3"],
             stdin=subprocess.PIPE, universal_newlines=True) as proc:
