@@ -26,6 +26,7 @@ except ImportError:
 
 # external commands
 git = run_wrapper('git', capture=True)
+git_can_fail = run_wrapper('git', capture=True, check=False)
 
 nul_f = open(os.devnull, 'w')
 
@@ -795,6 +796,17 @@ Good luck! ¯\_(ツ)_/¯"""  % (config.dir, config.pile_branch))
 
     return 0
 
+def check_baseline_is_ancestor(baseline, ref):
+    ret = git_can_fail("merge-base --is-ancestor {baseline} {ref}".format(baseline=baseline, ref=ref))
+    if ret.returncode != 0:
+        fatal("""baseline '%s' is not an ancestor of ref '%s'.
+
+Note that the pile baseline is implicitly used when no baseline is specified,
+so this error commonly occurs when the pile is not updated when the working
+branch is and no baseline is specified. If a branch non based on the pile
+baseline is intentionally being used, a baseline must be specified as well.
+See the help of this command for extra details""" % (baseline, ref))
+
 def cmd_format_patch(args):
     assert_required_tools()
 
@@ -856,6 +868,10 @@ def cmd_format_patch(args):
             newbaseline = oldbaseline
     else:
         fatal("could not parse arguments:", *args.refs)
+
+    # make sure the specified baseline commits are part of the branches
+    check_baseline_is_ancestor(oldbaseline, oldref)
+    check_baseline_is_ancestor(newbaseline, newref)
 
     range_diff_commits = git("range-diff --no-color --no-patch {oldbaseline}..{oldref} {newbaseline}..{newref}".format(
             oldbaseline=oldbaseline, newbaseline=newbaseline, oldref=oldref, newref=newref)).stdout.split("\n")
