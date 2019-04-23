@@ -685,6 +685,7 @@ def cmd_genpatches(args):
 
     return 0
 
+
 class PileCover:
     def __init__(self, m, version, baseline, pile_commit):
         self.m = m
@@ -745,7 +746,17 @@ class PileCover:
         return PileCover(m, version, baseline, pile_commit)
 
     def dump(self, f):
-        print(self.m.as_string(), file=f)
+        from_str = self.m.get_from() or "0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001"
+        f.write("From %s\n" % from_str)
+
+        for k, v in zip(self.m.keys(), self.m.values()):
+            if k.lower() == "subject":
+                has_subject = True
+            print("%s: %s" % (k, v), file=f)
+
+        f.write("\n")
+        f.write(self.m.get_payload(decode=True).decode())
+
 
 def cmd_am(args):
     config = Config()
