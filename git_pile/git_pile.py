@@ -445,7 +445,7 @@ def fix_duplicate_patch_names(patches):
     return ret
 
 
-def generate_series_list(commit_range):
+def generate_series_list(commit_range, suffix):
     if ".." in commit_range:
         single_arg = []
     else:
@@ -456,7 +456,7 @@ def generate_series_list(commit_range):
     series = [x[0:52] for x in series]
     series = fix_duplicate_patch_names(series)
     # add 0001 and .patch prefix/suffix
-    series = ["0001-{name}.patch".format(name=x) for x in series]
+    series = ["0001-{name}{suffix}".format(name=x, suffix=suffix) for x in series]
 
     return series if not single_arg else series[0]
 
@@ -585,7 +585,7 @@ def genpatches(output, base_commit, result_commit):
     if not commit_list:
         fatal("No commits in range %s" % commit_range)
 
-    series = generate_series_list(commit_range)
+    series = generate_series_list(commit_range, ".patch")
 
     # Do everything in a temporary directory and once we know it went ok, move
     # to the final destination - we can use os.rename() since we are creating
@@ -911,10 +911,10 @@ def cmd_format_patch(args):
         n += 1
 
     diff_filter_list = ["series", "config"]
-    diff_filter_list += [generate_series_list(x[1]) for x in a_commits]
-    diff_filter_list += [generate_series_list(x[0]) for x in c_commits]
-    diff_filter_list += [generate_series_list(x[1]) for x in c_commits]
-    diff_filter_list += [generate_series_list(x[0]) for x in d_commits]
+    diff_filter_list += [generate_series_list(x[1], "*.patch") for x in a_commits]
+    diff_filter_list += [generate_series_list(x[0], "*.patch") for x in c_commits]
+    diff_filter_list += [generate_series_list(x[1], "*.patch") for x in c_commits]
+    diff_filter_list += [generate_series_list(x[0], "*.patch") for x in d_commits]
     diff_filter_list = list(set(diff_filter_list))
 
     # get a simple diff of all the changes to attach to the coverletter filtered by the
