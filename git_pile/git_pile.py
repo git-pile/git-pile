@@ -809,6 +809,17 @@ Good luck! ¯\_(ツ)_/¯"""  % (config.dir, config.pile_branch))
 
     return 0
 
+def check_baseline_exists(baseline):
+    ret = git_can_fail("cat-file -e {baseline}".format(baseline=baseline))
+    if ret.returncode != 0:
+        fatal("""baseline commit '%s' not found!
+
+If the baseline tree has been force-pushed, the old baseline commits
+might have been pruned from the local repository. If the baselines are
+stored in the remote, they can be downloaded again with git fetch by
+specifying the relevant refspec, either one-off directly in the command
+or permanently in the git configuration file of the local repo.""" % (baseline))
+
 def check_baseline_is_ancestor(baseline, ref):
     ret = git_can_fail("merge-base --is-ancestor {baseline} {ref}".format(baseline=baseline, ref=ref))
     if ret.returncode != 0:
@@ -996,6 +1007,9 @@ def cmd_genbranch(args):
     root = git_root()
     patchesdir = op.join(root, config.dir)
     baseline = get_baseline(patchesdir)
+
+    # Make sure the baseline hasn't been pruned
+    check_baseline_exists(baseline);
 
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
