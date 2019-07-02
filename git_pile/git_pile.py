@@ -1000,8 +1000,9 @@ def cmd_genbranch(args):
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
     with temporary_worktree(baseline, root) as d:
+        stdout = nul_f if args.quiet else sys.stdout
         git("-C %s quiltimport --patches %s" %(d, patchesdir),
-            stdout=sys.stdout)
+            stdout=stdout)
 
         # always save HEAD to PILE_RESULT_HEAD
         shutil.copyfile(op.join(root, ".git", "worktrees", op.basename(d), "HEAD"),
@@ -1227,6 +1228,11 @@ series  config  X'.patch  Y'.patch  Z'.patch
     parser_genbranch.add_argument(
         "-f", "--force",
         help="Always create RESULT_BRANCH, even if it's checked out in any path",
+        action="store_true",
+        default=False)
+    parser_genbranch.add_argument(
+        "-q", "--quiet",
+        help="Quiet mode - do not print list of patches",
         action="store_true",
         default=False)
     parser_genbranch.set_defaults(func=cmd_genbranch)
