@@ -3,6 +3,7 @@
 
 import argparse
 import mailbox
+import math
 import os
 import os.path as op
 import shutil
@@ -618,12 +619,13 @@ def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, prefix, ran
     # Let only the lines with state == !, < or >
     reduced_range_diff = "\n".join(list(filter(lambda x: x and x.split(maxsplit=3)[2] in "!><", range_diff_commits)))
 
+    zero_fill = int(math.log10(n_patches)) + 1
     cover = op.join(output, "0000-cover-letter.patch")
     with open(cover, "w") as f:
         f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
 Date: {date}
-Subject: [{prefix} 0/{n_patches}] *** SUBJECT HERE ***
+Subject: [{prefix} {zeroes}/{n_patches}] *** SUBJECT HERE ***
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -636,7 +638,8 @@ pile-commit: {pile_commit}
 range-diff:
 {range_diff}
 
-""".format(user=user, email=email, date=now, n_patches=n_patches, baseline=baseline, pile_commit=pile_commit, prefix=prefix,
+""".format(user=user, email=email, date=now, zeroes="0".zfill(zero_fill),
+           n_patches=n_patches, baseline=baseline, pile_commit=pile_commit, prefix=prefix,
            range_diff=reduced_range_diff))
 
         for l in diff:
@@ -945,6 +948,7 @@ def cmd_format_patch(args):
     ca_commits = c_commits + a_commits
     ca_commits.sort(key=lambda x: x[2])
     total_patches = len(ca_commits)
+    zero_fill = int(math.log10(total_patches)) + 1
     cover = gen_cover_letter(diff, output, total_patches, newbaseline,
                              git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
                              prefix, range_diff_commits)
@@ -974,7 +978,8 @@ def cmd_format_patch(args):
                         # found the subject, re-format it
                         title = l[len(subject_header):]
                         newf.write("Subject: [{prefix} {i}/{n_patches}] {title}".format(
-                                   prefix=prefix, i=i + 1, n_patches=total_patches,
+                                   prefix=prefix, i=str(i + 1).zfill(zero_fill),
+                                   n_patches=total_patches,
                                    title=title))
                         break
                     else:
