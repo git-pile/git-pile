@@ -31,6 +31,9 @@ git_can_fail = run_wrapper('git', capture=True, check=False)
 
 nul_f = open(os.devnull, 'w')
 
+def log10_or_zero(n):
+    return math.log10(n) if n else 0
+
 def assert_required_tools():
     error_msg_git = "git >= 2.19 is needed, please check requirements"
 
@@ -619,7 +622,7 @@ def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, prefix, ran
     # Let only the lines with state == !, < or >
     reduced_range_diff = "\n".join(list(filter(lambda x: x and x.split(maxsplit=3)[2] in "!><", range_diff_commits)))
 
-    zero_fill = int(math.log10(n_patches)) + 1
+    zero_fill = int(log10_or_zero(n_patches)) + 1
     cover = op.join(output, "0000-cover-letter.patch")
     with open(cover, "w") as f:
         f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
@@ -959,7 +962,7 @@ def cmd_format_patch(args):
     ca_commits = c_commits + a_commits
     ca_commits.sort(key=lambda x: x[2])
     total_patches = len(ca_commits)
-    zero_fill = int(math.log10(total_patches)) + 1
+    zero_fill = int(log10_or_zero(total_patches)) + 1
     cover = gen_cover_letter(diff, output, total_patches, newbaseline,
                              git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
                              prefix, range_diff_commits)
