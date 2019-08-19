@@ -701,7 +701,7 @@ class PileCover:
         self.pile_commit = pile_commit
 
     def parse(fname):
-        mbox = mailbox.mbox(fname)
+        mbox = mailbox.mbox(fname, create=False)
 
         if mbox is None or len(mbox) == 0:
             error("No patches in '%s'" % fname)
