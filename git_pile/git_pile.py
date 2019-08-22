@@ -244,7 +244,7 @@ def assert_valid_result_branch(result_branch, baseline):
 #
 # To be used in `with` context handling.
 @contextmanager
-def temporary_worktree(commit, dir, prefix=".git-pile-worktree"):
+def temporary_worktree(commit, dir, prefix="git-pile-worktree"):
     try:
         with tempfile.TemporaryDirectory(dir=dir, prefix=prefix) as d:
             git("worktree add --detach --checkout %s %s" % (d, commit),
