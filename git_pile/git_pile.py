@@ -702,10 +702,30 @@ class PileCover:
         self.pile_commit = pile_commit
 
     def parse(fname):
-        mbox = mailbox.mbox(fname)
+        if fname is None:
+            oldf = sys.stdin.buffer
+        else:
+            oldf = open(fname, 'rb')
 
+        # look-ahead on first line and fix up if needed
+        l0 = oldf.readline()
+        f = tempfile.NamedTemporaryFile("wb+")
+        if l0.startswith(b'From '):
+            f.write(l0)
+        else:
+            f.write(b'From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001n\n')
+            f.write(l0)
+
+        f.write(oldf.read())
+
+        if oldf != sys.stdin.buffer:
+            oldf.close()
+
+        f.seek(0)
+
+        mbox = mailbox.mbox(f.name, create=False)
         if mbox is None or len(mbox) == 0:
-            error("No patches in '%s'" % fname)
+            error("No patches in '%s'" % fname if fname else "stdin")
             return None
 
         m = mbox[0]
@@ -786,16 +806,7 @@ def cmd_am(args):
     root = git_root()
     patchesdir = op.join(root, config.dir)
 
-    # use stdin: read everything to a file to be processed by the mailbox tools
-    if args.mbox_cover is None:
-        f = tempfile.NamedTemporaryFile("wb+")
-        f.write(sys.stdin.buffer.read())
-        f.seek(0)
-        fname = f.name
-    else:
-        fname = args.mbox_cover
-
-    cover = PileCover.parse(fname)
+    cover = PileCover.parse(args.mbox_cover)
     if not cover:
         return 1
 
