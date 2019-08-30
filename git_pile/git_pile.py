@@ -386,11 +386,11 @@ def cmd_setup(args):
         fatal("branch '%s' is already checked out at '%s'"
               % (local_result_branch, path))
 
+    force_arg = "-f" if args.force else ""
     # Yay, it looks like all sanity checks passed and we are not being
     # fuzzy-tested, try to do the useful work
     if create_pile_branch:
         info("Creating branch %s" % local_pile_branch)
-        force_arg = "-f" if args.force else ""
         git("branch %s -t %s %s" % (force_arg, local_pile_branch, args.pile_branch))
     if create_result_branch:
         info("Creating branch %s" % local_result_branch)
