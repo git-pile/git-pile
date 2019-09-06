@@ -978,10 +978,13 @@ def cmd_format_patch(args):
     os.makedirs(output, exist_ok=True)
     rm_patches(output)
 
-    try:
-        prefix = git("config --get format.subjectprefix").stdout.strip()
-    except subprocess.CalledProcessError:
-        prefix = "PATCH"
+    if args.subject_prefix:
+        prefix = args.subject_prefix
+    else:
+        try:
+            prefix = git("config --get format.subjectprefix").stdout.strip()
+        except subprocess.CalledProcessError:
+            prefix = "PATCH"
 
     ca_commits = c_commits + a_commits
     ca_commits.sort(key=lambda x: x[2])
@@ -1298,6 +1301,12 @@ series  config  X'.patch  Y'.patch  Z'.patch
              "removed.",
         action="store_true",
         default=False)
+    parser_format_patch.add_argument(
+        "--subject-prefix",
+        help="Instead of the standard [PATCH] prefix in the subject line, use\n"
+             "[<Subject-Prefix>]. See git-format-patch(1) for details.",
+        metavar="SUBJECT_PREFIX",
+        default=None)
     parser_format_patch.add_argument(
         "refs",
         help="""
