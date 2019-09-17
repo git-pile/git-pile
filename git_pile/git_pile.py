@@ -835,6 +835,7 @@ Good luck! ¯\_(ツ)_/¯"""  % (config.dir, config.pile_branch))
         info("Generating branch '%s'" % config.result_branch)
         args.force = True
         args.branch = None
+        args.quiet = False
         return cmd_genbranch(args)
 
     return 0
