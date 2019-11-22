@@ -66,7 +66,7 @@ class Config:
             return
 
         for kv in s.split('\n'):
-            key, value = kv.strip().split()
+            key, value = kv.strip().split(maxsplit=1)
             # pile.*
             key = key[5:].replace('-', '_')
             setattr(self, key, value)
