@@ -60,6 +60,7 @@ class Config:
         self.dir = ""
         self.result_branch = ""
         self.pile_branch = ""
+        self.format_add_header = ""
 
         s = git(["config", "--get-regexp", "^pile\\.*"], check=False, stderr=nul_f).stdout.strip()
         if not s:
@@ -613,7 +614,7 @@ def genpatches(output, base_commit, result_commit):
     return 0
 
 
-def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, prefix, range_diff_commits):
+def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, prefix, range_diff_commits, add_header):
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
@@ -632,7 +633,7 @@ Date: {date}
 Subject: [{prefix} {zeroes}/{n_patches}] *** SUBJECT HERE ***
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
+Content-Transfer-Encoding: 8bit{add_header}
 
 *** BLURB HERE ***
 
@@ -644,7 +645,7 @@ range-diff:
 
 """.format(user=user, email=email, date=now, zeroes="0".zfill(zero_fill),
            n_patches=n_patches, baseline=baseline, pile_commit=pile_commit, prefix=prefix,
-           range_diff=reduced_range_diff))
+           range_diff=reduced_range_diff, add_header="\n" + add_header if add_header else ""))
 
         for l in diff:
             f.write(l)
@@ -993,13 +994,17 @@ def cmd_format_patch(args):
     zero_fill = int(log10_or_zero(total_patches)) + 1
     cover = gen_cover_letter(diff, output, total_patches, newbaseline,
                              git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
-                             prefix, range_diff_commits)
+                             prefix, range_diff_commits, add_header=config.format_add_header)
     print(cover)
 
     with tempfile.TemporaryDirectory() as d:
         for i, c in enumerate(ca_commits):
-            old = git(["format-patch", "--subject-prefix=PATCH", "--zero-commit", "--signature=",
-                    "-o", d, "-N", "-1", c[1]]).stdout.strip()
+            format_cmd = ["format-patch", "--subject-prefix=PATCH", "--zero-commit", "--signature="]
+            if config.format_add_header:
+                format_cmd.extend(["--add-header", config.format_add_header])
+            format_cmd.extend(["-o", d, "-N", "-1", c[1]])
+
+            old = git(format_cmd).stdout.strip()
             new = op.join(output, "%04d-%s" % (i + 1, old[len(d) + 1 + 5:]))
 
             # Copy patches to the final output direcory fixing the Subject
