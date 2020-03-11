@@ -754,7 +754,7 @@ class PileCover:
         pile_commit = None
 
         for idx, l in enumerate(body_list[start:]):
-            if l.startswith("diff"):
+            if l.startswith("diff") or l.startswith('range-diff'):
                 break
 
             elems = l.split(": ")
