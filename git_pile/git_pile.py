@@ -654,6 +654,39 @@ range-diff:
 
     return cover
 
+def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, newref, add_header):
+    # possibly too big diff, just avoid it for now
+    if oldbaseline != newbaseline:
+        return
+
+    user = git("config --get user.name").stdout.strip()
+    email = git("config --get user.email").stdout.strip()
+    # RFC 2822-compliant date format
+    now = strftime("%a, %d %b %Y %T %z")
+
+    fn = op.join(output, "{n_patches}-full-tree-diff.patch".format(n_patches=n_patches))
+    with open(fn, "w") as f:
+        f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: {user} <{email}>
+Date: {date}
+Subject: [REVIEW] Full tree diff against {oldref}
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+X-Patchwork-Hint: ignore{add_header}
+
+Auto-generated diff between {oldref}..{newref}
+---
+""".format(user=user, email=email, date=now, oldref=oldref, newref=newref,
+           add_header="\n" + add_header if add_header else ""))
+
+        f.flush()
+        git("diff --stat -p --no-ext-diff {oldref}..{newref}".format(oldref=oldref, newref=newref), stdout=f)
+        f.flush()
+
+        f.write("--\ngit-pile {version}\n\n".format(version=__version__))
+
+    return fn
 
 def cmd_genpatches(args):
     config = Config()
@@ -754,7 +787,7 @@ class PileCover:
         pile_commit = None
 
         for idx, l in enumerate(body_list[start:]):
-            if l.startswith("diff"):
+            if l.startswith("diff") or l.startswith('range-diff'):
                 break
 
             elems = l.split(": ")
@@ -1037,6 +1070,12 @@ def cmd_format_patch(args):
 
             print(new)
 
+        if not args.no_full_patch:
+            tail = gen_full_tree_patch(output, "%04d" % (total_patches + 1),
+                                       oldbaseline, newbaseline, oldref, newref,
+                                       config.format_add_header)
+            print(tail)
+
     return 0
 
 def cmd_genbranch(args):
@@ -1313,6 +1352,11 @@ series  config  X'.patch  Y'.patch  Z'.patch
              "[<Subject-Prefix>]. See git-format-patch(1) for details.",
         metavar="SUBJECT_PREFIX",
         default=None)
+    parser_format_patch.add_argument(
+        "--no-full-patch",
+        help="Do not generate patch with full diff\n",
+        action="store_true",
+        default=False)
     parser_format_patch.add_argument(
         "refs",
         help="""
