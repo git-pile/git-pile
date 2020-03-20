@@ -252,6 +252,9 @@ def assert_valid_result_branch(result_branch, baseline):
 # To be used in `with` context handling.
 @contextmanager
 def temporary_worktree(commit, dir, prefix="git-pile-worktree"):
+    class Break(Exception):
+      """Break out of the with statement"""
+
     try:
         with tempfile.TemporaryDirectory(dir=dir, prefix=prefix) as d:
             git("worktree add --detach --checkout %s %s" % (d, commit),
@@ -1105,6 +1108,10 @@ def cmd_genbranch(args):
             for p in open(op.join(patchesdir, "series")).readlines()
             if len(p.strip()) > 0 and p[0] != "#"]
     stdout = nul_f if args.quiet else sys.stdout
+    if not args.dirty:
+        apply_cmd = ["am", "-3"]
+    else:
+        apply_cmd = ["apply", "--unsafe-paths", "-p1"]
 
     # "In-place mode" resets and applies patches directly to working
     # directory.  If conflicts arise, user can resolve them and continue
@@ -1125,7 +1132,7 @@ def cmd_genbranch(args):
         else:
             git("checkout -B %s %s" % (args.branch, baseline))
 
-        ret = git_can_fail(["am", "-3"] + patchlist, stdout=stdout)
+        ret = git_can_fail(apply_cmd + patchlist, stdout=stdout)
         if ret.returncode != 0:
             fatal("""Conflict encountered while applying pile patches.
 
@@ -1137,7 +1144,10 @@ pile patches.""")
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
     with temporary_worktree(baseline, root) as d:
-        git(["-C", d, "am", "-3"] + patchlist, stdout=stdout)
+        git(["-C", d] + apply_cmd + patchlist, stdout=stdout)
+
+        if args.dirty:
+            raise temporary_worktree.Break
 
         head = git(["-C", d, "rev-parse", "HEAD"]).stdout.strip()
 
@@ -1424,6 +1434,12 @@ series  config  X'.patch  Y'.patch  Z'.patch
         dest="inplace",
         default=False)
     parser_genbranch.set_defaults(func=cmd_genbranch)
+    parser_genbranch.add_argument(
+        "--dirty",
+        help="Just apply the patches, do not create the corresponding commits",
+        action="store_true",
+        dest="dirty",
+        default=False)
 
     # format-patch
     parser_format_patch = subparsers.add_parser('format-patch', help="Generate patches from BASELINE..HEAD and save patch series to output directory to be shared on a mailing list",
