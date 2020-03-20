@@ -1134,9 +1134,9 @@ pile patches.""")
     with temporary_worktree(baseline, root) as d:
         git(["-C", d, "am", "-3"] + patchlist, stdout=stdout)
 
-        # always save HEAD to PILE_RESULT_HEAD
-        shutil.copyfile(op.join(root, ".git", "worktrees", op.basename(d), "HEAD"),
-                        op.join(root, ".git", "PILE_RESULT_HEAD"))
+        # always save HEAD of the temporary worktree to PILE_RESULT_HEAD in the CWD
+        shutil.copyfile(op.join(git_worktree_get_git_dir(d), "HEAD"),
+                        op.join(git_worktree_get_git_dir(), "PILE_RESULT_HEAD"))
 
         branch = args.branch if args.branch else config.result_branch
         path = git_worktree_get_checkout_path(root, branch)
