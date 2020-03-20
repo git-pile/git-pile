@@ -1096,6 +1096,9 @@ def cmd_genbranch(args):
     # Make sure the baseline hasn't been pruned
     check_baseline_exists(baseline);
 
+    patchlist = [op.join(patchesdir, p.strip())
+            for p in open(op.join(patchesdir, "series")).readlines()
+            if len(p.strip()) > 0 and p[0] != "#"]
     stdout = nul_f if args.quiet else sys.stdout
 
     # "In-place mode" resets and applies patches directly to working
@@ -1117,10 +1120,6 @@ def cmd_genbranch(args):
         else:
             git("checkout -B %s %s" % (args.branch, baseline))
 
-        patchlist = [op.join(patchesdir, p.strip())
-                for p in open(op.join(patchesdir, "series")).readlines()
-                if len(p.strip()) > 0 and p[0] != "#"]
-
         ret = git_can_fail(["am", "-3"] + patchlist, stdout=stdout)
         if ret.returncode != 0:
             fatal("""Conflict encountered while applying pile patches.
@@ -1133,8 +1132,7 @@ pile patches.""")
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
     with temporary_worktree(baseline, root) as d:
-        git("-C %s quiltimport --patches %s" %(d, patchesdir),
-            stdout=stdout)
+        git(["-C", d, "am", "-3"] + patchlist, stdout=stdout)
 
         # always save HEAD to PILE_RESULT_HEAD
         shutil.copyfile(op.join(root, ".git", "worktrees", op.basename(d), "HEAD"),
