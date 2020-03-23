@@ -41,6 +41,7 @@ setup(
     package_data={'git_pile': [
         op.join('data', 'git-cover-order.txt'),
     ]},
+    python_requires='>=3.5',
     data_files=[
         (bash_completion_dir, ['extra/git-pile-complete.sh']),
         (op.join(mandir, 'man1'), ['man/man1/git-pile-am.1',
