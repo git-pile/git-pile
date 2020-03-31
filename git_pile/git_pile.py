@@ -155,6 +155,12 @@ def git_worktree_get_checkout_path(root, branch):
     return path
 
 
+# Get the git dir (aka .git) directory for the worktree related to
+# the @path. @path defaults to CWD
+def git_worktree_get_git_dir(path='.'):
+    return git("-C %s rev-parse --git-dir" % path).stdout.strip("\n")
+
+
 def _parse_baseline_line(iterable):
     for l in iterable:
         if l.startswith("BASELINE="):
@@ -1083,7 +1089,6 @@ def cmd_genbranch(args):
     if not config.check_is_valid():
         return 1
 
-    branch = args.branch if args.branch else config.result_branch
     root = git_root()
     patchesdir = op.join(root, config.dir)
     baseline = get_baseline(patchesdir)
@@ -1091,17 +1096,49 @@ def cmd_genbranch(args):
     # Make sure the baseline hasn't been pruned
     check_baseline_exists(baseline);
 
+    patchlist = [op.join(patchesdir, p.strip())
+            for p in open(op.join(patchesdir, "series")).readlines()
+            if len(p.strip()) > 0 and p[0] != "#"]
+    stdout = nul_f if args.quiet else sys.stdout
+
+    # "In-place mode" resets and applies patches directly to working
+    # directory.  If conflicts arise, user can resolve them and continue
+    # application via 'git am --continue'.
+    if args.inplace:
+        if patchesdir == os.getcwd():
+            fatal("Wrong directory: can't git-reset over pile branch checkout")
+        gitdir = git_worktree_get_git_dir()
+        if os.path.exists(op.join(gitdir, "rebase-apply")):
+            fatal("'git am' already in progress on working tree.")
+        if os.path.exists(op.join(gitdir, "rebase-merge")):
+            fatal("'git rebase' already in progress on working tree.")
+
+        if not args.branch:
+            # use whatever is currently checked out, might as well be in
+            # detached state
+            git("reset --hard %s" % baseline)
+        else:
+            git("checkout -B %s %s" % (args.branch, baseline))
+
+        ret = git_can_fail(["am", "-3"] + patchlist, stdout=stdout)
+        if ret.returncode != 0:
+            fatal("""Conflict encountered while applying pile patches.
+
+Please resolve the conflict, then run "git am --continue" to continue applying
+pile patches.""")
+
+        return 0
+
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
     with temporary_worktree(baseline, root) as d:
-        stdout = nul_f if args.quiet else sys.stdout
-        git("-C %s quiltimport --patches %s" %(d, patchesdir),
-            stdout=stdout)
+        git(["-C", d, "am", "-3"] + patchlist, stdout=stdout)
 
-        # always save HEAD to PILE_RESULT_HEAD
-        shutil.copyfile(op.join(root, ".git", "worktrees", op.basename(d), "HEAD"),
-                        op.join(root, ".git", "PILE_RESULT_HEAD"))
+        # always save HEAD of the temporary worktree to PILE_RESULT_HEAD in the CWD
+        shutil.copyfile(op.join(git_worktree_get_git_dir(d), "HEAD"),
+                        op.join(git_worktree_get_git_dir(), "PILE_RESULT_HEAD"))
 
+        branch = args.branch if args.branch else config.result_branch
         path = git_worktree_get_checkout_path(root, branch)
         if path:
             if not args.force:
@@ -1328,6 +1365,12 @@ series  config  X'.patch  Y'.patch  Z'.patch
         "-q", "--quiet",
         help="Quiet mode - do not print list of patches",
         action="store_true",
+        default=False)
+    parser_genbranch.add_argument(
+        "-i", "--inplace", "--in-place",
+        help="Generate branch in-place, enable conflict resolution and recovery: the current branch in the CWD is reset to the baseline commit and patches applied",
+        action="store_true",
+        dest="inplace",
         default=False)
     parser_genbranch.set_defaults(func=cmd_genbranch)
 
