@@ -1211,10 +1211,17 @@ def cmd_reset(args):
     if not remote_pile:
         fatal("Branch %s doesn't have an upstream" % config.pile_branch)
 
-    branch_dir = git_worktree_get_checkout_path(gitroot, config.result_branch)
-    if not branch_dir:
-        fatal("Could not find checkout of %s branch, refusing to reset.\nYou should probably inspect '%s'"
-              % (config.result_branch, gitroot))
+    if args.inplace:
+        branch_dir = os.getcwd()
+        if branch_dir == pile_dir:
+            fatal("In-place reset can't reset both %s and %s branches to the same commit\n"
+                  "You are probably in the wrong directory for in-place reset."
+                  % (config.pile_branch, config.result_branch))
+    else:
+        branch_dir = git_worktree_get_checkout_path(gitroot, config.result_branch)
+        if not branch_dir:
+            fatal("Could not find checkout of %s branch, refusing to reset.\nYou should probably inspect '%s'"
+                  % (config.result_branch, gitroot))
 
     remote_branch = git_can_fail("rev-parse --abbrev-ref %s@{u}" % config.result_branch).stdout.strip()
     if not remote_branch:
@@ -1494,6 +1501,12 @@ shortcut. From more verbose to the easiest ones:
 
     # reset
     parser_reset = subparsers.add_parser('reset', help="Reset RESULT_BRANCH and PILE_BRANCH to match remote")
+    parser_reset.add_argument(
+        "-i", "--inplace", "--in-place",
+        help="Reset branch in-place: the current branch in the CWD is reset to the upstream of RESULT_BRANCH",
+        action="store_true",
+        dest="inplace",
+        default=False)
     parser_reset.set_defaults(func=cmd_reset)
 
     # add options to all subparsers
