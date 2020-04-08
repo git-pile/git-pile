@@ -876,6 +876,7 @@ Good luck! ¯\_(ツ)_/¯"""  % (config.dir, config.pile_branch))
         args.force = True
         args.branch = None
         args.quiet = False
+        args.inplace = False
         return cmd_genbranch(args)
 
     return 0
