@@ -1218,18 +1218,28 @@ def cmd_reset(args):
             fatal("In-place reset can't reset both %s and %s branches to the same commit\n"
                   "You are probably in the wrong directory for in-place reset."
                   % (config.pile_branch, config.result_branch))
+
+        local_branch = git("rev-parse --abbrev-ref HEAD").stdout.strip()
+        if local_branch == "HEAD":
+            local_branch = git("rev-parse --short HEAD").stdout.strip() + " (detached)"
     else:
         branch_dir = git_worktree_get_checkout_path(gitroot, config.result_branch)
         if not branch_dir:
             fatal("Could not find checkout of %s branch, refusing to reset.\nYou should probably inspect '%s'"
                   % (config.result_branch, gitroot))
+        local_branch = config.result_branch
 
     remote_branch = git_can_fail("rev-parse --abbrev-ref %s@{u}" % config.result_branch).stdout.strip()
     if not remote_branch:
         fatal("Branch %s doesn't have an upstream" % config.result_branch)
 
     git(["-C", pile_dir, "reset", "--hard", remote_pile])
+    print("{local_branch:<20}-> {remote_branch:<20} {dir}".format(
+          local_branch=config.pile_branch, remote_branch=remote_pile, dir=pile_dir))
+
     git(["-C", branch_dir, "reset", "--hard", remote_branch])
+    print("{local_branch:<20}-> {remote_branch:<20} {dir}".format(
+          local_branch=local_branch, remote_branch=remote_branch, dir=branch_dir))
 
     print("Branches synchronized with their current remotes")
 
