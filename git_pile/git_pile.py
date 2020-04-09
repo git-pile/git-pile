@@ -838,7 +838,7 @@ class PileCover:
             print("%s: %s" % (k, v), file=f)
 
         f.write("\n")
-        f.write(self.m.get_payload(decode=True).decode())
+        f.write(self.m.get_payload(decode=False))
 
 
 def cmd_am(args):
