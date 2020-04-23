@@ -27,4 +27,11 @@ develop-eggs
 ## Installer logs
 pip-log.txt
 
+# patches
+*.patch
+
+# cscope files
+cscope.*
+ncscope.*
+
 /git-pile-wrapper-*
