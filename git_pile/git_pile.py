@@ -605,8 +605,8 @@ def genpatches(output, base_commit, result_commit):
     with tempfile.TemporaryDirectory() as d:
         for idx, c in enumerate(commit_list):
             with open(op.join(d, series[idx]), "w+") as f:
-                git(["format-patch", "--subject-prefix=PATCH", "--zero-commit", "--signature=",
-                    "--stdout", "-N", "-1", c], stdout=f)
+                git(["format-patch", "--no-add-header", "--no-cc", "--subject-prefix=PATCH",
+                     "--zero-commit", "--signature=", "--stdout", "-N", "-1", c], stdout=f)
 
         os.makedirs(output, exist_ok=True)
         rm_patches(output)
