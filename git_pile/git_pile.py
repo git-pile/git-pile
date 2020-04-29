@@ -1011,7 +1011,7 @@ def cmd_format_patch(args):
         if ret != 0:
             return 1
 
-        git("-C %s add -A" % tmpdir)
+        git("-C %s add --force -A" % tmpdir)
         order_file = op.join(op.dirname(op.realpath(__file__)),
                              "data", "git-cover-order.txt")
         diff = git(["-C", tmpdir, "diff", "--cached", "-p", "--stat", '-O', order_file, "--no-ext-diff", "--",
