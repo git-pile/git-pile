@@ -660,7 +660,7 @@ range-diff:
 
     return cover
 
-def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, newref, add_header):
+def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, newref, prefix, add_header):
     # possibly too big diff, just avoid it for now
     if oldbaseline != newbaseline:
         return
@@ -675,7 +675,7 @@ def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, new
         f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
 Date: {date}
-Subject: [REVIEW] Full tree diff against {oldref}
+Subject: [{tag}] Full tree diff against {oldref}
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -684,6 +684,7 @@ X-Patchwork-Hint: ignore{add_header}
 Auto-generated diff between {oldref}..{newref}
 ---
 """.format(user=user, email=email, date=now, oldref=oldref, newref=newref,
+           tag = prefix.replace("PATCH", "REVIEW"),
            add_header="\n" + add_header if add_header else ""))
 
         f.flush()
@@ -1083,7 +1084,7 @@ def cmd_format_patch(args):
         if not args.no_full_patch:
             tail = gen_full_tree_patch(output, "%04d" % (total_patches + 1),
                                        oldbaseline, newbaseline, oldref, newref,
-                                       config.format_add_header)
+                                       prefix, config.format_add_header)
             print(tail)
 
     return 0
