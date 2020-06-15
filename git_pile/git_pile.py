@@ -1139,21 +1139,19 @@ pile patches.""")
     with temporary_worktree(baseline, root) as d:
         git(["-C", d, "am", "-3"] + patchlist, stdout=stdout)
 
-        # always save HEAD of the temporary worktree to PILE_RESULT_HEAD in the CWD
-        shutil.copyfile(op.join(git_worktree_get_git_dir(d), "HEAD"),
-                        op.join(git_worktree_get_git_dir(), "PILE_RESULT_HEAD"))
+        head = git(["-C", d, "rev-parse", "HEAD"]).stdout.strip()
 
         branch = args.branch if args.branch else config.result_branch
         path = git_worktree_get_checkout_path(root, branch)
         if path:
             if not args.force:
-                error("final result is PILE_RESULT_HEAD but branch '%s' could not be updated to it "
-                      "because it is checked out at '%s'" % (branch, path))
+                error("final result is %s but branch '%s' could not be updated to it "
+                      "because it is checked out at '%s'" % (head, branch, path))
                 return 1
             else:
-                git("-C %s reset --hard PILE_RESULT_HEAD" % (path), stdout=nul_f, stderr=nul_f)
+                git("-C %s reset --hard %s" % (path, head), stdout=nul_f, stderr=nul_f)
         else:
-            git("-C %s checkout -f -B %s HEAD" % (d, branch), stdout=nul_f, stderr=nul_f)
+            git("-C %s checkout -f -B %s %s" % (d, branch, head), stdout=nul_f, stderr=nul_f)
 
     return 0
 
