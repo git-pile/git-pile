@@ -1109,7 +1109,7 @@ def cmd_genbranch(args):
             if len(p.strip()) > 0 and p[0] != "#"]
     stdout = nul_f if args.quiet else sys.stdout
     if not args.dirty:
-        apply_cmd = ["am", "-3"]
+        apply_cmd = ["am", "--no-3way"]
     else:
         apply_cmd = ["apply", "--unsafe-paths", "-p1"]
 
