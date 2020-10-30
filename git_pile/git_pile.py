@@ -896,9 +896,13 @@ stored in the remote, they can be downloaded again with git fetch by
 specifying the relevant refspec, either one-off directly in the command
 or permanently in the git configuration file of the local repo.""" % (baseline))
 
+
+def git_ref_is_ancestor(ancestor, ref):
+    return git_can_fail(f"merge-base --is-ancestor {ancestor} {ref}").returncode == 0
+
+
 def check_baseline_is_ancestor(baseline, ref):
-    ret = git_can_fail("merge-base --is-ancestor {baseline} {ref}".format(baseline=baseline, ref=ref))
-    if ret.returncode != 0:
+    if not git_ref_is_ancestor(baseline, ref):
         fatal("""baseline '%s' is not an ancestor of ref '%s'.
 
 Note that the pile baseline is implicitly used when no baseline is specified,
@@ -906,6 +910,8 @@ so this error commonly occurs when the pile is not updated when the working
 branch is and no baseline is specified. If a branch non based on the pile
 baseline is intentionally being used, a baseline must be specified as well.
 See the help of this command for extra details""" % (baseline, ref))
+
+
 
 def cmd_format_patch(args):
     assert_required_tools()
@@ -972,6 +978,9 @@ def cmd_format_patch(args):
     # make sure the specified baseline commits are part of the branches
     check_baseline_is_ancestor(oldbaseline, oldref)
     check_baseline_is_ancestor(newbaseline, newref)
+
+    if not git_ref_is_ancestor(f"{config.pile_branch}", f"{config.pile_branch}@{{u}}"):
+        fatal(f"'{config.pile_branch}' branch contains local commits that aren't visible outside this repo")
 
     range_diff_commits = git("range-diff --no-color --no-patch {oldbaseline}..{oldref} {newbaseline}..{newref}".format(
             oldbaseline=oldbaseline, newbaseline=newbaseline, oldref=oldref, newref=newref)).stdout.split("\n")
