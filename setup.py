@@ -7,8 +7,8 @@ from git_pile import __version__
 import os
 import sys
 
-if sys.version_info < (3, 5):
-    sys.exit("Sorry, we need at least Python 3.5.x")
+if sys.version_info < (3, 6):
+    sys.exit("Sorry, we need at least Python 3.6.x")
 
 if "install" in sys.argv and "--user" in sys.argv:
     # this is not a standard location, the user still needs to source the file,
@@ -41,7 +41,7 @@ setup(
     package_data={'git_pile': [
         op.join('data', 'git-cover-order.txt'),
     ]},
-    python_requires='>=3.5',
+    python_requires='>=3.6',
     data_files=[
         (bash_completion_dir, ['extra/git-pile-complete.sh']),
         (op.join(mandir, 'man1'), ['man/man1/git-pile-am.1',
