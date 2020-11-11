@@ -666,7 +666,7 @@ range-diff:
 def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, newref, prefix, add_header):
     # possibly too big diff, just avoid it for now
     if oldbaseline != newbaseline:
-        return
+        return None
 
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
@@ -1097,7 +1097,8 @@ def cmd_format_patch(args):
             tail = gen_full_tree_patch(output, "%04d" % (total_patches + 1),
                                        oldbaseline, newbaseline, oldref, newref,
                                        prefix, config.format_add_header)
-            print(tail)
+            if tail:
+                print(tail)
 
     return 0
 
