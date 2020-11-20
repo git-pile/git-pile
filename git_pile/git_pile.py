@@ -884,6 +884,7 @@ Good luck! ¯\_(ツ)_/¯"""  % (config.dir, config.pile_branch))
         args.branch = None
         args.quiet = False
         args.inplace = False
+        args.dirty = False
         return cmd_genbranch(args)
 
     return 0
