@@ -4,8 +4,13 @@
 from os import path as op
 from setuptools import setup
 from git_pile import __version__
+
+import pathlib
 import os
 import sys
+
+HERE = pathlib.Path(__file__).parent
+README = (HERE / "README.md").read_text()
 
 if sys.version_info < (3, 6):
     sys.exit("Sorry, we need at least Python 3.6.x")
@@ -25,10 +30,12 @@ setup(
     zip_safe = False,
     version=__version__,
     description="Manage a pile of patches on top of git branches",
-    url="FIXME",
+    long_description=README,
+    long_description_content_type="text/markdown",
+    url="https://github.com/git-pile/git-pile",
     maintainer="git-pile contributors",
     include_package_data=True,
-    maintainer_email="FIXME@lists.freedesktop.org",
+    maintainer_email="lucas.demarchi@intel.com",
     license="LGPLv2+",
     scripts=["git-pile", "git-mbox-prepare"],
     classifiers=['Intended Audience :: Developers',
