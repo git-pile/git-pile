@@ -218,7 +218,7 @@ def assert_valid_pile_branch(pile):
             has_config = True
         elif l == "series":
             has_series = True
-        elif not l.endswith(".patch"):
+        elif not l.endswith(".patch") and not l.startswith('.') and op.dirname(l) != '':
             non_patches = True
 
     errorstr = "Branch '{pile}' does not look like a pile branch. No '{filename}' file found."
