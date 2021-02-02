@@ -1197,6 +1197,8 @@ def cmd_baseline(args):
 
 
 def cmd_destroy(args):
+    # everything here should work even if we have an invalid/partial
+    # configuration.
     config = Config()
 
     # everything here is relative to root
