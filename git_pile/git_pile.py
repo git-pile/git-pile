@@ -1221,6 +1221,8 @@ def cmd_destroy(args):
 
 def cmd_reset(args):
     config = Config()
+    if not config.check_is_valid():
+        return 1
 
     # everything here is relative to root
     gitroot = git_root()
