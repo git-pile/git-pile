@@ -983,8 +983,11 @@ def cmd_format_patch(args):
     check_baseline_is_ancestor(oldbaseline, oldref)
     check_baseline_is_ancestor(newbaseline, newref)
 
-    if not git_ref_is_ancestor(f"{config.pile_branch}", f"{config.pile_branch}@{{u}}"):
-        fatal(f"'{config.pile_branch}' branch contains local commits that aren't visible outside this repo")
+    if not args.allow_local_pile_commits and not git_ref_is_ancestor(f"{config.pile_branch}", f"{config.pile_branch}@{{u}}"):
+        fatal(f"""'{config.pile_branch}' branch contains local commits that aren't visible outside this repo.
+
+If this is indeed the desired behavior, pass --allow-local-pile-commits as
+option to this command.""")
 
     range_diff_commits = git("range-diff --no-color --no-patch {oldbaseline}..{oldref} {newbaseline}..{newref}".format(
             oldbaseline=oldbaseline, newbaseline=newbaseline, oldref=oldref, newref=newref)).stdout.split("\n")
@@ -1476,6 +1479,11 @@ series  config  X'.patch  Y'.patch  Z'.patch
     parser_format_patch.add_argument(
         "--no-full-patch",
         help="Do not generate patch with full diff\n",
+        action="store_true",
+        default=False)
+    parser_format_patch.add_argument(
+        "--allow-local-pile-commits",
+        help="Bypass check for local pile commits to allow partial patch series",
         action="store_true",
         default=False)
     parser_format_patch.add_argument(
