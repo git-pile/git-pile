@@ -1143,9 +1143,13 @@ def cmd_genbranch(args):
         else:
             git("checkout -B %s %s" % (args.branch, baseline))
 
-        ret = git_can_fail(apply_cmd + patchlist, stdout=stdout)
-        if ret.returncode != 0:
-            fatal("""Conflict encountered while applying pile patches.
+        n = 1
+        for p in patchlist:
+            print(f'[{n}/{len(patchlist)}]', end=' ', flush=True)
+            ret = git_can_fail(apply_cmd + [p], stdout=stdout)
+            n += 1
+            if ret.returncode != 0:
+                fatal("""Conflict encountered while applying pile patches.
 
 Please resolve the conflict, then run "git am --continue" to continue applying
 pile patches.""")
@@ -1155,7 +1159,11 @@ pile patches.""")
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
     with temporary_worktree(baseline, root) as d:
-        git(["-C", d] + apply_cmd + patchlist, stdout=stdout)
+        n = 1
+        for p in patchlist:
+            print(f'[{n}/{len(patchlist)}]', end=' ', flush=True)
+            git(["-C", d] + apply_cmd + [p], stdout=stdout)
+            n += 1
 
         if args.dirty:
             raise temporary_worktree.Break
