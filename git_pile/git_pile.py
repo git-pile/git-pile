@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: LGPL-2.1+
 
 import argparse
+import email
 import email.header
-import mailbox
 import math
 import os
 import os.path as op
@@ -767,12 +767,11 @@ class PileCover:
 
         f.seek(0)
 
-        mbox = mailbox.mbox(f.name, create=False)
-        if mbox is None or len(mbox) == 0:
+        m = email.message_from_binary_file(f)
+        if not m:
             error("No patches in '%s'" % fname if fname else "stdin")
             return None
 
-        m = mbox[0]
         body_list = m.get_payload(decode=True).decode().splitlines()
         for l in reversed(body_list):
             if not l:
@@ -818,7 +817,7 @@ class PileCover:
         return PileCover(m, version, baseline, pile_commit)
 
     def dump(self, f):
-        from_str = self.m.get_from() or "0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001"
+        from_str = self.m.get_unixfrom() or "0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001"
         f.write("From %s\n" % from_str)
 
         for k, v in zip(self.m.keys(), self.m.values()):
