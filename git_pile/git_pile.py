@@ -62,6 +62,8 @@ class Config:
         self.pile_branch = ""
         self.format_add_header = ""
         self.genbranch_committer_date_is_author_date = True
+        self.genbranch_user_name = None
+        self.genbranch_user_email = None
 
         s = git(["config", "--get-regexp", "^pile\\.*"], check=False, stderr=nul_f).stdout.strip()
         if not s:
@@ -1141,7 +1143,14 @@ def cmd_genbranch(args):
         apply_cmd = ["am", "--no-3way"]
         if config.genbranch_committer_date_is_author_date:
             apply_cmd.append("--committer-date-is-author-date")
+
+        env = os.environ.copy()
+        if config.genbranch_user_name:
+            env['GIT_COMMITTER_NAME'] = config.genbranch_user_name
+        if config.genbranch_user_email:
+            env['GIT_COMMITTER_EMAIL'] = config.genbranch_user_email
     else:
+        env = None
         apply_cmd = ["apply", "--unsafe-paths", "-p1"]
 
     # "In-place mode" resets and applies patches directly to working
@@ -1163,7 +1172,7 @@ def cmd_genbranch(args):
         else:
             git("checkout -B %s %s" % (args.branch, baseline))
 
-        ret = git_can_fail(apply_cmd + patchlist, stdout=stdout)
+        ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, env=env)
         if ret.returncode != 0:
             fatal("""Conflict encountered while applying pile patches.
 
