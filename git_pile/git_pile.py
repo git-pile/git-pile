@@ -69,7 +69,7 @@ class Config:
         for kv in s.split('\n'):
             key, value = kv.strip().split(maxsplit=1)
             # pile.*
-            key = key[5:].replace('-', '_')
+            key = key[5:].translate(str.maketrans('-.', '__'))
             setattr(self, key, value)
 
     def is_valid(self):
