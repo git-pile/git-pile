@@ -61,6 +61,7 @@ class Config:
         self.result_branch = ""
         self.pile_branch = ""
         self.format_add_header = ""
+        self.genbranch_committer_date_is_author_date = True
 
         s = git(["config", "--get-regexp", "^pile\\.*"], check=False, stderr=nul_f).stdout.strip()
         if not s:
@@ -1138,6 +1139,8 @@ def cmd_genbranch(args):
     stdout = nul_f if args.quiet else sys.stdout
     if not args.dirty:
         apply_cmd = ["am", "--no-3way"]
+        if config.genbranch_committer_date_is_author_date:
+            apply_cmd.append("--committer-date-is-author-date")
     else:
         apply_cmd = ["apply", "--unsafe-paths", "-p1"]
 
