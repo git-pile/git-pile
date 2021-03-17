@@ -70,7 +70,10 @@ class Config:
             key, value = kv.strip().split(maxsplit=1)
             # pile.*
             key = key[5:].translate(str.maketrans('-.', '__'))
-            setattr(self, key, value)
+            try:
+                setattr(self, key, value)
+            except e:
+                warn(f"could not set {key}={value} from git config")
 
     def is_valid(self):
         return self.dir != '' and self.result_branch != '' and self.pile_branch != ''
