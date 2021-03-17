@@ -67,13 +67,24 @@ class Config:
             return
 
         for kv in s.split('\n'):
-            key, value = kv.strip().split(maxsplit=1)
+            try:
+                key, value = kv.strip().split(maxsplit=1, sep=" ")
+            except ValueError:
+                key = kv
+                value = None
+
             # pile.*
             key = key[5:].translate(str.maketrans('-.', '__'))
             try:
+                if hasattr(self, key) and isinstance(getattr(self, key), bool):
+                    value = self._value_to_bool(value)
+
                 setattr(self, key, value)
             except e:
                 warn(f"could not set {key}={value} from git config")
+
+    def _value_to_bool(self, value):
+        return value is None or value.lower() in [ "yes", "on", "true", "1" ]
 
     def is_valid(self):
         return self.dir != '' and self.result_branch != '' and self.pile_branch != ''
