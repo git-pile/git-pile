@@ -61,16 +61,33 @@ class Config:
         self.result_branch = ""
         self.pile_branch = ""
         self.format_add_header = ""
+        self.genbranch_committer_date_is_author_date = True
+        self.genbranch_user_name = None
+        self.genbranch_user_email = None
 
         s = git(["config", "--get-regexp", "^pile\\.*"], check=False, stderr=nul_f).stdout.strip()
         if not s:
             return
 
         for kv in s.split('\n'):
-            key, value = kv.strip().split(maxsplit=1)
+            try:
+                key, value = kv.strip().split(maxsplit=1, sep=" ")
+            except ValueError:
+                key = kv
+                value = None
+
             # pile.*
-            key = key[5:].replace('-', '_')
-            setattr(self, key, value)
+            key = key[5:].translate(str.maketrans('-.', '__'))
+            try:
+                if hasattr(self, key) and isinstance(getattr(self, key), bool):
+                    value = self._value_to_bool(value)
+
+                setattr(self, key, value)
+            except e:
+                warn(f"could not set {key}={value} from git config")
+
+    def _value_to_bool(self, value):
+        return value is None or value.lower() in [ "yes", "on", "true", "1" ]
 
     def is_valid(self):
         return self.dir != '' and self.result_branch != '' and self.pile_branch != ''
@@ -1123,7 +1140,16 @@ def cmd_genbranch(args):
     stdout = nul_f if args.quiet else sys.stdout
     if not args.dirty:
         apply_cmd = ["am", "--no-3way"]
+        if config.genbranch_committer_date_is_author_date:
+            apply_cmd.append("--committer-date-is-author-date")
+
+        env = os.environ.copy()
+        if config.genbranch_user_name:
+            env['GIT_COMMITTER_NAME'] = config.genbranch_user_name
+        if config.genbranch_user_email:
+            env['GIT_COMMITTER_EMAIL'] = config.genbranch_user_email
     else:
+        env = None
         apply_cmd = ["apply", "--unsafe-paths", "-p1"]
 
     # "In-place mode" resets and applies patches directly to working
@@ -1145,7 +1171,7 @@ def cmd_genbranch(args):
         else:
             git("checkout -B %s %s" % (args.branch, baseline))
 
-        ret = git_can_fail(apply_cmd + patchlist, stdout=stdout)
+        ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, env=env)
         if ret.returncode != 0:
             fatal("""Conflict encountered while applying pile patches.
 
