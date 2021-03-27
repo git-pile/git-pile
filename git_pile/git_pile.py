@@ -1064,9 +1064,8 @@ option to this command.""")
         except subprocess.CalledProcessError:
             prefix = "PATCH"
 
-    ca_commits = c_commits + a_commits
-    ca_commits.sort(key=lambda x: x[2])
-    total_patches = len(ca_commits)
+    a_commits.sort(key=lambda x: x[2])
+    total_patches = len(a_commits)
     zero_fill = int(log10_or_zero(total_patches)) + 1
     cover = gen_cover_letter(diff, output, total_patches, newbaseline,
                              git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
@@ -1074,7 +1073,7 @@ option to this command.""")
     print(cover)
 
     with tempfile.TemporaryDirectory() as d:
-        for i, c in enumerate(ca_commits):
+        for i, c in enumerate(a_commits):
             format_cmd = ["format-patch", "--subject-prefix=PATCH", "--zero-commit", "--signature="]
             if config.format_add_header:
                 format_cmd.extend(["--add-header", config.format_add_header])
