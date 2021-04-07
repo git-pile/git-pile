@@ -690,21 +690,20 @@ def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, new
     # RFC 2822-compliant date format
     now = strftime("%a, %d %b %Y %T %z")
 
-    fn = op.join(output, "{n_patches}-full-tree-diff.patch".format(n_patches=n_patches))
+    fn = op.join(output, "{n_patches:04d}-full-tree-diff.patch".format(n_patches=n_patches))
     with open(fn, "w") as f:
         f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
 Date: {date}
-Subject: [{tag}] Full tree diff against {oldref}
+Subject: [{prefix} {n_patches}/{n_patches}] REVIEW: Full tree diff against {oldref}
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
-X-Patchwork-Hint: ignore{add_header}
+Content-Transfer-Encoding: 8bit{add_header}
 
 Auto-generated diff between {oldref}..{newref}
 ---
 """.format(user=user, email=email, date=now, oldref=oldref, newref=newref,
-           tag = prefix.replace("PATCH", "REVIEW"),
+           prefix = prefix, n_patches = n_patches,
            add_header="\n" + add_header if add_header else ""))
 
         f.flush()
@@ -1068,7 +1067,11 @@ option to this command.""")
             prefix = "PATCH"
 
     a_commits.sort(key=lambda x: x[2])
+
     total_patches = len(a_commits)
+    if not args.no_full_patch:
+        total_patches += 1
+
     zero_fill = int(log10_or_zero(total_patches)) + 1
     cover = gen_cover_letter(diff, output, total_patches, newbaseline,
                              git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
@@ -1116,7 +1119,7 @@ option to this command.""")
             print(new)
 
         if not args.no_full_patch:
-            tail = gen_full_tree_patch(output, "%04d" % (total_patches + 1),
+            tail = gen_full_tree_patch(output, total_patches,
                                        oldbaseline, newbaseline, oldref, newref,
                                        prefix, config.format_add_header)
             if tail:
