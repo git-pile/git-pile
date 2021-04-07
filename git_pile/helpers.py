@@ -103,3 +103,7 @@ def error(s, *args, **kwargs):
 def warn(s, *args, **kwargs):
     kwargs.setdefault("file", sys.stderr)
     print("warning:", s, *args, **kwargs)
+
+
+def orderedset(it):
+    return dict.fromkeys(it).keys()
