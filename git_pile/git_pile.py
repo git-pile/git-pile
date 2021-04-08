@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from time import strftime
 
 from .helpers import error, info, fatal, warn
-from .helpers import run_wrapper, set_debugging
+from .helpers import run_wrapper, set_debugging, orderedset
 from . import __version__
 
 try:
@@ -1029,12 +1029,12 @@ option to this command.""")
 
         n += 1
 
-    diff_filter_list = ["series", "config"]
-    diff_filter_list += [generate_series_list(x[1], "*.patch") for x in a_commits]
+    diff_filter_list = ["config", "series"]
     diff_filter_list += [generate_series_list(x[0], "*.patch") for x in c_commits]
     diff_filter_list += [generate_series_list(x[1], "*.patch") for x in c_commits]
+    diff_filter_list += [generate_series_list(x[1], "*.patch") for x in a_commits]
     diff_filter_list += [generate_series_list(x[0], "*.patch") for x in d_commits]
-    diff_filter_list = list(set(diff_filter_list))
+    diff_filter_list = list(orderedset(diff_filter_list))
 
     # get a simple diff of all the changes to attach to the coverletter filtered by the
     # output of git-range-diff
@@ -1044,13 +1044,16 @@ option to this command.""")
             return 1
 
         git("-C %s add --force -A" % tmpdir)
-        order_file = op.join(op.dirname(op.realpath(__file__)),
-                             "data", "git-cover-order.txt")
-        diff = git(["-C", tmpdir, "diff", "--cached", "-p", "--stat", '-O', order_file, "--no-ext-diff", "--",
-                    *diff_filter_list]).stdout
-        if not diff:
-            fatal("Nothing changed from %s..%s to %s..%s"
-                    % (oldbaseline, config.result_branch, newbaseline, newref))
+        with tempfile.NamedTemporaryFile('w+') as order_file:
+            for l in diff_filter_list:
+                order_file.write(l + "\n")
+            order_file.flush()
+
+            diff = git(["-C", tmpdir, "diff", "--cached", "-p", "--stat", '-O', order_file.name, "--no-ext-diff", "--",
+                        *diff_filter_list]).stdout
+            if not diff:
+                fatal("Nothing changed from %s..%s to %s..%s"
+                        % (oldbaseline, config.result_branch, newbaseline, newref))
 
     output = args.output_directory
     os.makedirs(output, exist_ok=True)
@@ -1064,9 +1067,8 @@ option to this command.""")
         except subprocess.CalledProcessError:
             prefix = "PATCH"
 
-    ca_commits = c_commits + a_commits
-    ca_commits.sort(key=lambda x: x[2])
-    total_patches = len(ca_commits)
+    a_commits.sort(key=lambda x: x[2])
+    total_patches = len(a_commits)
     zero_fill = int(log10_or_zero(total_patches)) + 1
     cover = gen_cover_letter(diff, output, total_patches, newbaseline,
                              git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
@@ -1074,7 +1076,7 @@ option to this command.""")
     print(cover)
 
     with tempfile.TemporaryDirectory() as d:
-        for i, c in enumerate(ca_commits):
+        for i, c in enumerate(a_commits):
             format_cmd = ["format-patch", "--subject-prefix=PATCH", "--zero-commit", "--signature="]
             if config.format_add_header:
                 format_cmd.extend(["--add-header", config.format_add_header])
