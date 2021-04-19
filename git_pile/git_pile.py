@@ -681,10 +681,6 @@ range-diff:
     return cover
 
 def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, newref, prefix, add_header):
-    # possibly too big diff, just avoid it for now
-    if oldbaseline != newbaseline:
-        return None
-
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
@@ -1003,6 +999,10 @@ def cmd_format_patch(args):
 
 If this is indeed the desired behavior, pass --allow-local-pile-commits as
 option to this command.""")
+
+    # possibly too big diff, just avoid it for now - force it to false
+    if oldbaseline != newbaseline:
+        args.no_full_patch = True
 
     creation_factor = f"--creation-factor={args.creation_factor}" if args.creation_factor else ""
     range_diff_commits = git("range-diff --no-color --no-patch {creation_factor} {oldbaseline}..{oldref} {newbaseline}..{newref}".format(
