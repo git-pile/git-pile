@@ -1004,8 +1004,9 @@ def cmd_format_patch(args):
 If this is indeed the desired behavior, pass --allow-local-pile-commits as
 option to this command.""")
 
-    range_diff_commits = git("range-diff --no-color --no-patch {oldbaseline}..{oldref} {newbaseline}..{newref}".format(
-            oldbaseline=oldbaseline, newbaseline=newbaseline, oldref=oldref, newref=newref)).stdout.split("\n")
+    creation_factor = f"--creation-factor={args.creation_factor}" if args.creation_factor else ""
+    range_diff_commits = git("range-diff --no-color --no-patch {creation_factor} {oldbaseline}..{oldref} {newbaseline}..{newref}".format(
+            creation_factor=creation_factor, oldbaseline=oldbaseline, newbaseline=newbaseline, oldref=oldref, newref=newref)).stdout.split("\n")
 
     # stat lines are in the form of
     # 1:  34cf518f0aab ! 1:  3a4e12046539 <commit message>
@@ -1520,6 +1521,11 @@ series  config  X'.patch  Y'.patch  Z'.patch
         help="Bypass check for local pile commits to allow partial patch series",
         action="store_true",
         default=False)
+    parser_format_patch.add_argument(
+        '--creation-factor',
+        help="--creation-factor argument passed to git-range-diff. It controls the percentage of change used to consider a patch new vs modified. See GIT-RANGE-DIFF(1)",
+        action="store",
+        default=None)
     parser_format_patch.add_argument(
         "refs",
         help="""
