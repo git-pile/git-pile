@@ -997,7 +997,7 @@ def cmd_format_patch(args):
     if not args.allow_local_pile_commits and not git_ref_is_ancestor(f"{config.pile_branch}", f"{config.pile_branch}@{{u}}"):
         fatal(f"""'{config.pile_branch}' branch contains local commits that aren't visible outside this repo.
 
-If this is indeed the desired behavior, pass --allow-local-pile-commits as
+If this is indeed the desired behavior, pass --allow-local-pile-commits or --local as
 option to this command.""")
 
     # possibly too big diff, just avoid it for now - force it to false
@@ -1517,7 +1517,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
         action="store_true",
         default=False)
     parser_format_patch.add_argument(
-        "--allow-local-pile-commits",
+        "--allow-local-pile-commits", "--local",
         help="Bypass check for local pile commits to allow partial patch series",
         action="store_true",
         default=False)
