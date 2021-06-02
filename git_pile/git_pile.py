@@ -1189,6 +1189,13 @@ pile patches.""")
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
     with temporary_worktree(baseline, root) as d:
+        branch = args.branch if args.branch else config.result_branch
+        path = git_worktree_get_checkout_path(root, branch)
+
+        if path and not args.force:
+            error("can't use branch '%s' because it is checked out at '%s'" % (branch, path))
+            return 1
+
         git(["-C", d] + apply_cmd + patchlist, stdout=stdout)
 
         if args.dirty:
@@ -1196,15 +1203,9 @@ pile patches.""")
 
         head = git(["-C", d, "rev-parse", "HEAD"]).stdout.strip()
 
-        branch = args.branch if args.branch else config.result_branch
-        path = git_worktree_get_checkout_path(root, branch)
         if path:
-            if not args.force:
-                error("final result is %s but branch '%s' could not be updated to it "
-                      "because it is checked out at '%s'" % (head, branch, path))
-                return 1
-            else:
-                git("-C %s reset --hard %s" % (path, head), stdout=nul_f, stderr=nul_f)
+            # args.force checked earlier
+            git("-C %s reset --hard %s" % (path, head), stdout=nul_f, stderr=nul_f)
         else:
             git("-C %s checkout -f -B %s %s" % (d, branch, head), stdout=nul_f, stderr=nul_f)
 
