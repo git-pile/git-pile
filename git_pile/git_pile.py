@@ -61,6 +61,7 @@ class Config:
         self.result_branch = ""
         self.pile_branch = ""
         self.format_add_header = ""
+        self.format_output_directory = ""
         self.genbranch_committer_date_is_author_date = True
         self.genbranch_user_name = None
         self.genbranch_user_email = None
@@ -1064,9 +1065,13 @@ option to this command.""")
                 fatal("Nothing changed from %s..%s to %s..%s"
                         % (oldbaseline, config.result_branch, newbaseline, newref))
 
-    output = args.output_directory
-    os.makedirs(output, exist_ok=True)
-    rm_patches(output)
+    if not args.output_directory and config.format_output_directory:
+        output = config.format_output_directory
+    else:
+        output = args.output_directory
+
+    os.makedirs(output or '.', exist_ok=True)
+    rm_patches(output or '.')
 
     if args.subject_prefix:
         prefix = args.subject_prefix
@@ -1506,10 +1511,9 @@ series  config  X'.patch  Y'.patch  Z'.patch
         formatter_class=argparse.RawTextHelpFormatter)
     parser_format_patch.add_argument(
         "-o", "--output-directory",
-        help="Use OUTPUT_DIR to store the resulting files instead of the CWD. This must be an\n"
-             "empty/non-existent directory unless -f/--force is also used",
+        help="Use OUTPUT_DIR to store the resulting files instead of the format-output-directory from config (default: CWD)",
         metavar="OUTPUT_DIR",
-        default=".")
+        default="")
     parser_format_patch.add_argument(
         "-f", "--force",
         help="Force use of OUTPUT_DIR even if it has patches. The existent patches will be\n"
