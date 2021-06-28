@@ -953,38 +953,40 @@ def _parse_format_refs(refs, current_baseline):
 
     if len(refs) == 1:
         # Single branch name or "HEAD": the branch needs the upstream to be set in order to work
-        if git_branch_exists(refs[0]):
-            newref = refs[0]
+        branch = refs[0]
+
+        if git_branch_exists(branch):
+            newref = branch
         else:
-            newref = git("symbolic-ref --short -q {ref}".format(ref=refs[0]), check=False).stdout.strip()
+            newref = git(f"symbolic-ref --short -q {branch}", check=False).stdout.strip()
             if not newref:
-                fatal("'{ref}' does not name a branch".format(ref=refs[0]))
+                fatal(f"'{branch}' does not name a branch")
 
         # use upstream of this branch as the old ref
-        oldref = git("rev-parse --abbrev-ref {ref}@{{u}}".format(ref=refs[0]), stderr=nul_f, check=False).stdout.strip()
+        oldref = git(f"rev-parse --abbrev-ref {branch}@{{u}}", stderr=nul_f, check=False).stdout.strip()
         if not oldref:
-            fatal("'{ref}' does not have an upstream. Either set with 'git branch --set-upstream-to'\nor pass old and new branches explicitly (e.g repo/internal...my-new-branch))".format(ref=refs[0]))
+            fatal(f"'{branch}' does not have an upstream. Either set with 'git branch --set-upstream-to'\nor pass old and new branches explicitly (e.g repo/internal...my-new-branch))")
     elif len(refs) == 2:
         r1 = refs[0].split("..")
         r2 = refs[1].split("..")
         if len(r1) == len(r2) and len(r1) == 2:
             try:
-                oldbaseline = git("rev-parse {ref}".format(ref=r1[0]), stderr=nul_f).stdout.strip()
-                newbaseline = git("rev-parse {ref}".format(ref=r2[0]), stderr=nul_f).stdout.strip()
-                oldref = git("rev-parse {ref}".format(ref=r1[1]), stderr=nul_f).stdout.strip()
-                newref = git("rev-parse {ref}".format(ref=r2[1]), stderr=nul_f).stdout.strip()
+                oldbaseline = git(f"rev-parse {r1[0]}", stderr=nul_f).stdout.strip()
+                newbaseline = git(f"rev-parse {r2[0]}", stderr=nul_f).stdout.strip()
+                oldref = git(f"rev-parse {r1[1]}", stderr=nul_f).stdout.strip()
+                newref = git(f"rev-parse {r2[1]}", stderr=nul_f).stdout.strip()
             except subprocess.CalledProcessError:
                 if not oldbaseline or not newbaseline:
-                    fatal("{ref} does not point to a valid range".format(ref=r1))
-                fatal("{ref} does not point to a valid range".format(ref=r2))
+                    fatal(f"{r1} does not point to a valid range")
+                fatal(f"{r2} does not point to a valid range")
         else:
             try:
-                oldref = git("rev-parse {ref}".format(ref=refs[0]), stderr=nul_f).stdout.strip()
-                newref = git("rev-parse {ref}".format(ref=refs[1]), stderr=nul_f).stdout.strip()
+                oldref = git(f"rev-parse {refs[0]}", stderr=nul_f).stdout.strip()
+                newref = git(f"rev-parse {refs[1]}", stderr=nul_f).stdout.strip()
             except subprocess.CalledProcessError:
                 if not oldref:
-                    fatal("{ref} does not point to a valid ref".format(ref=refs[0]))
-                fatal("{ref} does not point to a valid ref".format(ref=refs[1]))
+                    fatal(f"{refs[0]} does not point to a valid ref")
+                fatal(f"{refs[1]} does not point to a valid ref")
     else:
         fatal("could not parse refs:", *refs)
 
