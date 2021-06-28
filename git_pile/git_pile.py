@@ -936,46 +936,37 @@ baseline is intentionally being used, a baseline must be specified as well.
 See the help of this command for extra details""" % (baseline, ref))
 
 
-
-def cmd_format_patch(args):
-    assert_required_tools()
-
-    config = Config()
-    if not config.check_is_valid():
-        return 1
-
+# Parse refs from command line
+#    branch  (branch@{u} is implicitly used)
+#    ref1...ref2
+#    ref1..ref2 ref3..ref4
+def _parse_format_refs(refs, current_baseline):
     oldbaseline = None
     newbaseline = None
     oldref = None
     newref = None
-    root = git_root()
-    patchesdir = op.join(root, config.dir)
 
-    # Parse ranges from command line
-    if len(args.refs) == 1:
-        r = args.refs[0].split("...")
+    if len(refs) == 1:
+        r = refs[0].split("...")
         if len(r) == 2:
-            args.refs = r
+            refs = r
 
-    if len(args.refs) == 1:
+    if len(refs) == 1:
         # Single branch name or "HEAD": the branch needs the upstream to be set in order to work
-        if git_branch_exists(args.refs[0]):
-            newref = args.refs[0]
+        if git_branch_exists(refs[0]):
+            newref = refs[0]
         else:
-            newref = git("symbolic-ref --short -q {ref}".format(ref=args.refs[0]), check=False).stdout.strip()
+            newref = git("symbolic-ref --short -q {ref}".format(ref=refs[0]), check=False).stdout.strip()
             if not newref:
-                fatal("'{ref}' does not name a branch".format(ref=args.refs[0]))
+                fatal("'{ref}' does not name a branch".format(ref=refs[0]))
 
         # use upstream of this branch as the old ref
-        oldref = git("rev-parse --abbrev-ref {ref}@{{u}}".format(ref=args.refs[0]), stderr=nul_f, check=False).stdout.strip()
+        oldref = git("rev-parse --abbrev-ref {ref}@{{u}}".format(ref=refs[0]), stderr=nul_f, check=False).stdout.strip()
         if not oldref:
-            fatal("'{ref}' does not have an upstream. Either set with 'git branch --set-upstream-to'\nor pass old and new branches explicitly (e.g repo/internal...my-new-branch))".format(ref=args.refs[0]))
-
-        oldbaseline = get_baseline(patchesdir)
-        newbaseline = oldbaseline
-    elif len(args.refs) == 2:
-        r1 = args.refs[0].split("..")
-        r2 = args.refs[1].split("..")
+            fatal("'{ref}' does not have an upstream. Either set with 'git branch --set-upstream-to'\nor pass old and new branches explicitly (e.g repo/internal...my-new-branch))".format(ref=refs[0]))
+    elif len(refs) == 2:
+        r1 = refs[0].split("..")
+        r2 = refs[1].split("..")
         if len(r1) == len(r2) and len(r1) == 2:
             try:
                 oldbaseline = git("rev-parse {ref}".format(ref=r1[0]), stderr=nul_f).stdout.strip()
@@ -988,17 +979,34 @@ def cmd_format_patch(args):
                 fatal("{ref} does not point to a valid range".format(ref=r2))
         else:
             try:
-                oldref = git("rev-parse {ref}".format(ref=args.refs[0]), stderr=nul_f).stdout.strip()
-                newref = git("rev-parse {ref}".format(ref=args.refs[1]), stderr=nul_f).stdout.strip()
+                oldref = git("rev-parse {ref}".format(ref=refs[0]), stderr=nul_f).stdout.strip()
+                newref = git("rev-parse {ref}".format(ref=refs[1]), stderr=nul_f).stdout.strip()
             except subprocess.CalledProcessError:
                 if not oldref:
-                    fatal("{ref} does not point to a valid ref".format(ref=args.refs[0]))
-                fatal("{ref} does not point to a valid ref".format(ref=args.refs[1]))
-            oldbaseline = get_baseline(patchesdir)
-            newbaseline = oldbaseline
+                    fatal("{ref} does not point to a valid ref".format(ref=refs[0]))
+                fatal("{ref} does not point to a valid ref".format(ref=refs[1]))
     else:
-        fatal("could not parse arguments:", *args.refs)
+        fatal("could not parse refs:", *refs)
 
+    # there were no changes in the baseline, re-use current one
+    if not oldbaseline:
+        oldbaseline = current_baseline
+        newbaseline = current_baseline
+
+    return oldbaseline, newbaseline, oldref, newref
+
+
+def cmd_format_patch(args):
+    assert_required_tools()
+
+    config = Config()
+    if not config.check_is_valid():
+        return 1
+
+    root = git_root()
+    patchesdir = op.join(root, config.dir)
+
+    oldbaseline, newbaseline, oldref, newref = _parse_format_refs(args.refs, get_baseline(patchesdir))
     # make sure the specified baseline commits are part of the branches
     check_baseline_is_ancestor(oldbaseline, oldref)
     check_baseline_is_ancestor(newbaseline, newref)
