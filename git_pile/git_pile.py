@@ -315,13 +315,13 @@ def cmd_init(args):
         #
         # Workaround is to do that ourselves with a temporary repository
         with tempfile.TemporaryDirectory() as d:
-            git("-C %s init" % d)
+            git("-C %s init -b pile" % d)
             update_baseline(d, base_commit)
             git("-C %s add -A" % d)
             git(["-C", d, "commit", "-m", "Initial git-pile configuration"])
 
             # Temporary repository created, now let's fetch and create our branch
-            git("fetch %s master:%s" % (d, config.pile_branch), stdout=nul_f, stderr=nul_f)
+            git("fetch %s pile:%s" % (d, config.pile_branch), stdout=nul_f, stderr=nul_f)
 
 
     # checkout pile branch as a new worktree
