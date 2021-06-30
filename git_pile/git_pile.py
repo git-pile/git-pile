@@ -997,6 +997,55 @@ def _parse_format_refs(refs, current_baseline):
     return oldbaseline, newbaseline, oldref, newref
 
 
+
+# @range_diff_commits is a string with multiple lines containing
+# the stat lines of the git-range-diff output. They have the following form:
+#
+#     1:  34cf518f0aab ! 1:  3a4e12046539 <commit message>
+#
+# Those lines are parsed to detect what were the commits changed, added
+# or removed
+#
+# Output is given in lists of tuples for changed, added and removed commits:
+#
+#     (old_commit_sha, new_commit_sha, new_position_in_branch)
+#
+# The last item in the return is a list of files that can be used as a "diff filter"
+# so to ignore commits that had only their sha changed, but remain the same before
+# in the range comparison
+def _parse_range_diff(range_diff_commits):
+    c_commits = []
+    a_commits = []
+    d_commits = []
+
+    # we maintain the position of each commit in the new branch so we can sort
+    # them later
+    n = 1
+
+    for c in range_diff_commits:
+        if not c:
+            continue
+
+        _, old_sha1, s, _, new_sha1, _ = c.split(maxsplit=5)
+        if s == "!":
+            c_commits += [(old_sha1, new_sha1, n)]
+        elif s == ">":
+            a_commits += [(old_sha1, new_sha1, n)]
+        elif s == "<":
+            d_commits += [(old_sha1, new_sha1, n)]
+
+        n += 1
+
+    diff_filter_list = ["config", "series"]
+    diff_filter_list += [generate_series_list(x[0], "*.patch") for x in c_commits]
+    diff_filter_list += [generate_series_list(x[1], "*.patch") for x in c_commits]
+    diff_filter_list += [generate_series_list(x[1], "*.patch") for x in a_commits]
+    diff_filter_list += [generate_series_list(x[0], "*.patch") for x in d_commits]
+    diff_filter_list = list(orderedset(diff_filter_list))
+    a_commits.sort(key=lambda x: x[2])
+
+    return c_commits, a_commits, d_commits, diff_filter_list
+
 def cmd_format_patch(args):
     assert_required_tools()
 
@@ -1026,33 +1075,7 @@ option to this command.""")
     range_diff_commits = git("range-diff --no-color --no-patch {creation_factor} {oldbaseline}..{oldref} {newbaseline}..{newref}".format(
             creation_factor=creation_factor, oldbaseline=oldbaseline, newbaseline=newbaseline, oldref=oldref, newref=newref)).stdout.split("\n")
 
-    # stat lines are in the form of
-    # 1:  34cf518f0aab ! 1:  3a4e12046539 <commit message>
-    # changed or added commits
-    c_commits = []
-    a_commits = []
-    d_commits = []
-    n = 1
-    for c in range_diff_commits:
-        if not c:
-            continue
-
-        _, old_sha1, s, _, new_sha1, _ = c.split(maxsplit=5)
-        if s == "!":
-            c_commits += [(old_sha1, new_sha1, n)]
-        elif s == ">":
-            a_commits += [(old_sha1, new_sha1, n)]
-        elif s == "<":
-            d_commits += [(old_sha1, new_sha1, n)]
-
-        n += 1
-
-    diff_filter_list = ["config", "series"]
-    diff_filter_list += [generate_series_list(x[0], "*.patch") for x in c_commits]
-    diff_filter_list += [generate_series_list(x[1], "*.patch") for x in c_commits]
-    diff_filter_list += [generate_series_list(x[1], "*.patch") for x in a_commits]
-    diff_filter_list += [generate_series_list(x[0], "*.patch") for x in d_commits]
-    diff_filter_list = list(orderedset(diff_filter_list))
+    c_commits, a_commits, d_commits, diff_filter_list = _parse_range_diff(range_diff_commits)
 
     # get a simple diff of all the changes to attach to the coverletter filtered by the
     # output of git-range-diff
@@ -1084,8 +1107,6 @@ option to this command.""")
             prefix = git("config --get format.subjectprefix").stdout.strip()
         except subprocess.CalledProcessError:
             prefix = "PATCH"
-
-    a_commits.sort(key=lambda x: x[2])
 
     total_patches = len(a_commits)
     if not args.no_full_patch:
