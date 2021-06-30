@@ -129,6 +129,15 @@ def git_remote_branch_exists(remote_and_branch):
     return git("show-ref --verify --quiet refs/remotes/%s" % remote_and_branch, check=False).returncode == 0
 
 
+def git_init(branch, directory):
+    if git_can_fail(f"-C {directory} init -b {branch}", stderr=nul_f).returncode == 0:
+        return
+
+    # git-init in git < 2.28 doesn't have a -b switch. Try to do that ourselves
+    git(f"-C {directory} init")
+    git(f"-C {directory} checkout -b {branch}")
+
+
 # Return the toplevel directory of the outermost git root, i.e. even if you are in a worktree
 # checkout it will return the "main" directory. E.g:
 #
@@ -308,7 +317,7 @@ def cmd_init(args):
     if not git_branch_exists(config.pile_branch):
         info("Creating branch %s" % config.pile_branch)
 
-        # Create and an orphan branch named `config.pile_branch` at the
+        # Create an orphan branch named `config.pile_branch` at the
         # `config.dir` location. Unfortunately git-branch can't do that;
         # git-checkout has a --orphan option, but that would necessarily
         # checkout the branch and the user would be left wondering what
@@ -316,13 +325,13 @@ def cmd_init(args):
         #
         # Workaround is to do that ourselves with a temporary repository
         with tempfile.TemporaryDirectory() as d:
-            git("-C %s init" % d)
+            git_init("pile", d)
             update_baseline(d, base_commit)
             git("-C %s add -A" % d)
             git(["-C", d, "commit", "-m", "Initial git-pile configuration"])
 
             # Temporary repository created, now let's fetch and create our branch
-            git("fetch %s master:%s" % (d, config.pile_branch), stdout=nul_f, stderr=nul_f)
+            git("fetch %s pile:%s" % (d, config.pile_branch), stdout=nul_f, stderr=nul_f)
 
 
     # checkout pile branch as a new worktree
