@@ -669,7 +669,6 @@ Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit{add_header}
 
 {blurb}
-
 ---
 baseline: {baseline}
 pile-commit: {pile_commit}
