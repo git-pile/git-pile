@@ -874,6 +874,56 @@ class PileCover:
         f.write(self.m.get_payload(decode=False))
 
 
+def git_am_solve_diff_hunk_conflicts(patchesdir):
+    status = git(f"-C {patchesdir} status --porcelain").stdout.splitlines()
+    resolved = True
+    any_unmerged = False
+
+    # double check we are actually resolving unmerged, we could have failed due
+    # to other reasons
+    for l in status:
+        if l[0] == 'U' or l[1] == 'U':
+            any_unmerged = True
+            break
+
+    if not any_unmerged:
+        return False
+
+    warn("\n\n--------------------------- git-pile")
+    warn("git am failed, trying to fix conflicts automatically")
+
+    sed = run_wrapper('sed', capture=True)
+
+    # solve UU conflicts only, we don't really know how to resolve the others
+    for f in status:
+        if not f.startswith("UU"):
+            resolved = False
+            continue
+
+        f = f.split()[1]
+        path = op.join(patchesdir, f)
+
+        print(f"Trying to fix conflicts in {f}... ", end="", file=sys.stderr)
+        sed(['-i', '-e', '/^<<<<<<< HEAD/ {N;N;N;N; s/<<<<<<< HEAD.*\\n@@.*\\n=======.*\\n\\(@@.*\\)\\n>>>>>>>.*/\\1/g}', path])
+
+        # Check with all markers are gone
+        any_markers = False
+        with open(path) as fp:
+            for l in fp:
+                if l.startswith("<<<<<<< HEAD"):
+                    any_markers = True
+                    break
+
+        if any_markers:
+            resolved = False
+            print("fail: couldn't solve all conflicts, some of them left behind", file=sys.stderr)
+        else:
+            print("done", file=sys.stderr)
+            git(f"-C {patchesdir} add {f}")
+
+    return resolved
+
+
 def cmd_am(args):
     config = Config()
     if not config.check_is_valid():
@@ -896,6 +946,12 @@ def cmd_am(args):
     with subprocess.Popen(["git", "-C", patchesdir, "am", "-3"],
             stdin=subprocess.PIPE, universal_newlines=True) as proc:
         cover.dump(proc.stdin)
+
+    if proc.returncode != 0 and args.fuzzy:
+        if git_am_solve_diff_hunk_conflicts(patchesdir):
+            info("Yay, fixed!")
+            git("am -C {patchesdir} --continue")
+            proc.returncode = 0
 
     if proc.returncode != 0:
         fatal("""git am failed, you will need to continue manually.
@@ -1635,6 +1691,14 @@ shortcut. From more verbose to the easiest ones:
              "the PILE_BRANCH will have diverged.",
         choices=["top", "pile-commit"],
         default="top")
+    parser_am.add_argument(
+        "--fuzzy",
+        help="Allow to apply a patch even with conflicts in the diff hunk line numbers. "
+             "When using this option we will automatically solving the conflicts of this kind "
+             "by taking `theirs` version as the correct. See 'HOW CONFLICTS ARE PRESENTED' in "
+             "GIT-MERGE(1)",
+        action="store_true",
+        default=False)
     parser_am.set_defaults(func=cmd_am)
 
     # baseline
