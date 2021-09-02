@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from time import strftime
 
 from .helpers import error, info, fatal, warn
-from .helpers import run_wrapper, set_debugging, orderedset
+from .helpers import run_wrapper, set_debugging, orderedset, prompt_yesno
 from . import __version__
 
 try:
@@ -874,7 +874,7 @@ class PileCover:
         f.write(self.m.get_payload(decode=False))
 
 
-def git_am_solve_diff_hunk_conflicts(patchesdir):
+def git_am_solve_diff_hunk_conflicts(args, patchesdir):
     status = git(f"-C {patchesdir} status --porcelain").stdout.splitlines()
     resolved = True
     any_unmerged = False
@@ -887,6 +887,18 @@ def git_am_solve_diff_hunk_conflicts(patchesdir):
             break
 
     if not any_unmerged:
+        return False
+
+    # Now check if we should actually try to fix the conflict
+    if args.fuzzy is None:
+        if sys.stdin.isatty():
+            fuzzy = prompt_yesno("git am failed. Auto-solve trivial conflicts?", default=True)
+        else:
+            fuzzy = False
+    else:
+        fuzzy = args.fuzzy
+
+    if not fuzzy:
         return False
 
     warn("\n\n--------------------------- git-pile")
@@ -947,8 +959,8 @@ def cmd_am(args):
             stdin=subprocess.PIPE, universal_newlines=True) as proc:
         cover.dump(proc.stdin)
 
-    if proc.returncode != 0 and args.fuzzy:
-        if git_am_solve_diff_hunk_conflicts(patchesdir):
+    if proc.returncode != 0:
+        if git_am_solve_diff_hunk_conflicts(args, patchesdir):
             info("Yay, fixed!")
             git("am -C {patchesdir} --continue")
             proc.returncode = 0
@@ -1691,14 +1703,19 @@ shortcut. From more verbose to the easiest ones:
              "the PILE_BRANCH will have diverged.",
         choices=["top", "pile-commit"],
         default="top")
+
+    parser_am.add_argument(
+        "--no-fuzzy",
+        action="store_false",
+        dest="fuzzy")
     parser_am.add_argument(
         "--fuzzy",
         help="Allow to apply a patch even with conflicts in the diff hunk line numbers. "
              "When using this option we will automatically solving the conflicts of this kind "
              "by taking `theirs` version as the correct. See 'HOW CONFLICTS ARE PRESENTED' in "
-             "GIT-MERGE(1)",
+             "GIT-MERGE(1) [Default: prompt if running on terminal, otherwise no]",
         action="store_true",
-        default=False)
+        dest="fuzzy")
     parser_am.set_defaults(func=cmd_am)
 
     # baseline
