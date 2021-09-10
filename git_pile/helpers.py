@@ -12,6 +12,19 @@ def set_debugging(val):
     global debug_run
     debug_run = val
 
+
+# Like open(), but reserves file == "-", file == "" or file == None for stdin
+def open_or_stdin(file, *args, **kwargs):
+    if not file or file == "-":
+        # we can't simply return sys.stdin as a file object may be used
+        # as a context manager, so f would implicitely be closed and fail
+        # a second call. We never want to implicitely close stdin
+        kwargs["closefd"] = False
+        return open(sys.stdin.fileno(), *args, **kwargs)
+
+    return open(file, *args, **kwargs)
+
+
 class run_wrapper:
     def __init__(self, cmd, env_default=None, capture=False, check=True, print_error_as_ignored=False):
         """

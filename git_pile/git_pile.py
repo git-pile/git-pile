@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from time import strftime
 
 from .helpers import error, info, fatal, warn
-from .helpers import run_wrapper, set_debugging, orderedset
+from .helpers import run_wrapper, set_debugging, orderedset, open_or_stdin
 from . import __version__
 
 try:
@@ -652,8 +652,7 @@ def genpatches(output, base_commit, result_commit):
 
 def get_cover_letter_message(commit_with_message, file_with_message):
     if file_with_message:
-        is_stdin = file_with_message == '-'
-        with open(sys.stdin.fileno() if is_stdin else file_with_message, closefd=not is_stdin) as f:
+        with open_or_stdin(file_with_message, "r") as f:
             subject = f.readline().strip()
             body = "".join(f.readlines()).strip()
     elif commit_with_message:
