@@ -650,13 +650,18 @@ def genpatches(output, base_commit, result_commit):
     return 0
 
 
-def get_cover_letter_message(commit_with_message):
-    if not commit_with_message:
-        subject = "*** SUBJECT HERE ***"
-        body = "*** BLURB HERE ***"
-    else:
+def get_cover_letter_message(commit_with_message, file_with_message):
+    if file_with_message:
+        is_stdin = file_with_message == '-'
+        with open(sys.stdin.fileno() if is_stdin else file_with_message, closefd=not is_stdin) as f:
+            subject = f.readline().strip()
+            body = "".join(f.readlines()).strip()
+    elif commit_with_message:
         subject = git(["log", "--format=%s", "-1", commit_with_message]).stdout.strip()
         body = git(["log", "--format=%b",  "-1", commit_with_message]).stdout.strip()
+    else:
+        subject = "*** SUBJECT HERE ***"
+        body = "*** BLURB HERE ***"
 
     return subject, body
 
@@ -1128,8 +1133,15 @@ def _parse_range_diff(range_diff_commits):
 
     return c_commits, a_commits, d_commits, diff_filter_list
 
+
+def assert_format_patch_compatible_args(args):
+    if args.commit_with_message and args.file:
+        fatal("-C and -F options are mutually exclusive")
+
+
 def cmd_format_patch(args):
     assert_required_tools()
+    assert_format_patch_compatible_args(args)
 
     config = Config()
     if not config.check_is_valid():
@@ -1199,7 +1211,8 @@ option to this command.""")
         total_patches += 1
 
     zero_fill = int(log10_or_zero(total_patches)) + 1
-    cover_subject, cover_body = get_cover_letter_message(args.commit_with_message)
+
+    cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file)
     cover = gen_cover_letter(diff, output, total_patches, newbaseline,
                              git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
                              prefix, range_diff_commits, config.format_add_header,
@@ -1658,6 +1671,10 @@ series  config  X'.patch  Y'.patch  Z'.patch
         help="Take an existing commit object, and reuse the log message as the cover-letter, like documented in GIT-COMMIT(1)",
         dest="commit_with_message",
         metavar="COMMIT")
+    parser_format_patch.add_argument(
+        '-F', '--file',
+        help="Take the commit message from the given file. Use - to read the message from the standard input. Like documented in GIT-COMMIT(1)",
+        metavar="FILE")
     parser_format_patch.add_argument(
         "refs",
         help="""
