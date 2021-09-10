@@ -1655,6 +1655,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
         default=None)
     parser_format_patch.add_argument(
         "-C", "--reuse-message",
+        help="Take an existing commit object, and reuse the log message as the cover-letter, like documented in GIT-COMMIT(1)",
         dest="commit_with_message",
         metavar="COMMIT")
     parser_format_patch.add_argument(
