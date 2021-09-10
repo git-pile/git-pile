@@ -650,7 +650,18 @@ def genpatches(output, base_commit, result_commit):
     return 0
 
 
-def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, prefix, range_diff_commits, add_header, commit_with_message):
+def get_cover_letter_message(commit_with_message):
+    if not commit_with_message:
+        subject = "*** SUBJECT HERE ***"
+        body = "*** BLURB HERE ***"
+    else:
+        subject = git(["log", "--format=%s", "-1", commit_with_message]).stdout.strip()
+        body = git(["log", "--format=%b",  "-1", commit_with_message]).stdout.strip()
+
+    return subject, body
+
+
+def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, prefix, range_diff_commits, add_header, subject, body):
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
@@ -659,13 +670,6 @@ def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, prefix, ran
     # 1:  34cf518f0aab ! 1:  3a4e12046539 <commit message>
     # Let only the lines with state == !, < or >
     reduced_range_diff = "\n".join(list(filter(lambda x: x and x.split(maxsplit=3)[2] in "!><", range_diff_commits)))
-
-    if not commit_with_message:
-        subject = "*** SUBJECT HERE ***"
-        blurb = "*** BLURB HERE ***"
-    else:
-        subject = git(["log", "--format=%s", "-1", commit_with_message]).stdout.strip()
-        blurb = git(["log", "--format=%b",  "-1", commit_with_message]).stdout.strip()
 
     zero_fill = int(log10_or_zero(n_patches)) + 1
     cover = op.join(output, "0000-cover-letter.patch")
@@ -678,7 +682,7 @@ MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit{add_header}
 
-{blurb}
+{body}
 ---
 baseline: {baseline}
 pile-commit: {pile_commit}
@@ -688,7 +692,7 @@ range-diff:
 """.format(user=user, email=email, date=now, zeroes="0".zfill(zero_fill),
            n_patches=n_patches, baseline=baseline, pile_commit=pile_commit, prefix=prefix,
            range_diff=reduced_range_diff, add_header="\n" + add_header if add_header else "",
-           subject=subject, blurb=blurb))
+           subject=subject, body=body))
 
         for l in diff:
             f.write(l)
@@ -1127,10 +1131,11 @@ option to this command.""")
         total_patches += 1
 
     zero_fill = int(log10_or_zero(total_patches)) + 1
+    cover_subject, cover_body = get_cover_letter_message(args.commit_with_message)
     cover = gen_cover_letter(diff, output, total_patches, newbaseline,
                              git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
                              prefix, range_diff_commits, config.format_add_header,
-                             args.reuse_message)
+                             cover_subject, cover_body)
     print(cover)
 
     with tempfile.TemporaryDirectory() as d:
@@ -1582,7 +1587,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
         default=None)
     parser_format_patch.add_argument(
         "-C", "--reuse-message",
-        help="Take an existing commit object, and reuse the log message as the cover-letter",
+        dest="commit_with_message",
         metavar="COMMIT")
     parser_format_patch.add_argument(
         "refs",
