@@ -1202,6 +1202,8 @@ def cmd_genbranch(args):
         apply_cmd = ["am", "--no-3way"]
         if config.genbranch_committer_date_is_author_date:
             apply_cmd.append("--committer-date-is-author-date")
+        if args.fix_whitespace:
+            apply_cmd.append("--whitespace=fix")
 
         env = os.environ.copy()
         if config.genbranch_user_name:
@@ -1537,6 +1539,10 @@ series  config  X'.patch  Y'.patch  Z'.patch
         action="store_true",
         dest="inplace",
         default=False)
+    parser_genbranch.add_argument(
+        "--fix-whitespace",
+        help="Pass --whitespace=fix to git am to fix whitespace",
+        action="store_true")
     parser_genbranch.set_defaults(func=cmd_genbranch)
     parser_genbranch.add_argument(
         "--dirty",
