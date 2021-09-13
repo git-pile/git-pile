@@ -1281,13 +1281,11 @@ option to this command.""")
 
     return 0
 
-def cmd_genbranch(args):
-    config = Config()
+
+def _genbranch(root, patchesdir, config, args):
     if not config.check_is_valid():
         return 1
 
-    root = git_root()
-    patchesdir = op.join(root, config.dir)
     baseline = get_baseline(patchesdir)
 
     # Make sure the baseline hasn't been pruned
@@ -1365,6 +1363,14 @@ pile patches.""")
             git("-C %s checkout -f -B %s %s" % (d, branch, head), stdout=nul_f, stderr=nul_f)
 
     return 0
+
+
+def cmd_genbranch(args):
+    config = Config()
+    root = git_root()
+    patchesdir = op.join(root, config.dir)
+
+    return _genbranch(root, patchesdir, config, args)
 
 
 def cmd_genlinear_branch(args):
