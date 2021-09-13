@@ -62,6 +62,7 @@ class Config:
         self.pile_branch = ""
         self.format_add_header = ""
         self.format_output_directory = ""
+        self.linear_branch = ""
         self.genbranch_committer_date_is_author_date = True
         self.genbranch_user_name = None
         self.genbranch_user_email = None
@@ -1366,6 +1367,16 @@ pile patches.""")
     return 0
 
 
+def cmd_genlinear_branch(args):
+    config = Config()
+    if not config.check_is_valid():
+        return 1
+
+    branch = config.linear_branch or args.branch
+    if not branch:
+        fatal("Branch not specified in command-line and not configured: use -b argument or configure in pile.linear-branch")
+
+
 def cmd_baseline(args):
     config = Config()
     if not config.check_is_valid():
@@ -1767,6 +1778,15 @@ shortcut. From more verbose to the easiest ones:
         action="store_true",
         dest="fuzzy")
     parser_am.set_defaults(func=cmd_am)
+
+    # genlinear-branch
+    parser_genlinear_branch = subparsers.add_parser('genlinear-branch', help="Generate linear branch from genbranch on each pile revision")
+    parser_genlinear_branch.add_argument(
+        "-b", "--branch",
+        help="Use BRANCH to store the linear result branch [Default: pile.linear-branch from config]",
+        metavar="BRANCH",
+        default="")
+    parser_genlinear_branch.set_defaults(func=cmd_genlinear_branch)
 
     # baseline
     parser_baseline = subparsers.add_parser('baseline', help="Return the baseline commit hash")
