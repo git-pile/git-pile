@@ -1374,6 +1374,25 @@ def cmd_genbranch(args):
     return _genbranch(root, patchesdir, config, args)
 
 
+def get_pile_commit_range_from_linearized(incremental, pile_branch, linear_branch):
+    if not incremental:
+        return None, pile_branch
+
+    proc = git_can_fail(f'rev-list --no-merges {linear_branch}', stderr=nul_f)
+    if proc.returncode or not proc.stdout:
+        return None, pile_branch
+
+    revs = proc.stdout.strip().split('\n')
+    key = "pile-commit: "
+    for rev in revs:
+        notes = git(f"log --format=%N -1 {rev}").stdout.strip().split("\n")
+        for n in notes:
+            if n.startswith(key):
+                return n[len(key):], pile_branch
+
+    return None, pile_branch
+
+
 def cmd_genlinear_branch(args):
     config = Config()
     if not config.check_is_valid():
@@ -1384,7 +1403,14 @@ def cmd_genlinear_branch(args):
     if not branch:
         fatal("Branch not specified in command-line and not configured: use -b argument or configure in pile.linear-branch")
 
-    revs = git(f'rev-list --no-merges --reverse {config.pile_branch}').stdout.strip().split('\n')
+    start_ref, end_ref = get_pile_commit_range_from_linearized(args.incremental, config.pile_branch, branch)
+    parent_rev = start_ref
+    commit_range = f"{start_ref}..{end_ref}" if parent_rev else end_ref
+
+    revs = git(f'rev-list --no-merges --reverse {commit_range}').stdout.strip().splitlines()
+    if not revs:
+        info("Nothing to do.")
+        return 0
 
     with temporary_worktree(revs[0], root) as piledir:
         # we have to checkout something in the directory we are going to
@@ -1396,8 +1422,7 @@ def cmd_genlinear_branch(args):
         commit = get_baseline(piledir) or revs[0]
         with temporary_worktree(commit, root) as resultdir:
             last_good_rev = None
-            parent_rev = None
-            tree = None
+            tree = "tree " + git(f"log --format=%T -1 {parent_rev}").stdout.strip() if parent_rev else None
 
             # avoid exit() from genbranch - we want to recover and continue
             set_fatal_behavior("raise")
@@ -1871,6 +1896,14 @@ shortcut. From more verbose to the easiest ones:
         help="Use BRANCH to store the linear result branch [Default: pile.linear-branch from config]",
         metavar="BRANCH",
         default="")
+    parser_genlinear_branch.add_argument(
+        "-r", "--recreate", "--no-incremental",
+        help="Do not reuse branch to skip revisions that were already previously "
+             "executed through genlinear-branch. Instead, work in non-incremental "
+             "mode, recreating the branch from scratch",
+        action="store_false",
+        dest="incremental",
+        default=True)
     parser_genlinear_branch.set_defaults(func=cmd_genlinear_branch)
 
     # baseline
