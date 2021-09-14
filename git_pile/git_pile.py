@@ -988,12 +988,8 @@ Good luck! ¯\_(ツ)_/¯"""  % (config.dir, config.pile_branch))
 
     if args.genbranch:
         info("Generating branch '%s'" % config.result_branch)
-        args.force = True
-        args.branch = None
-        args.quiet = False
-        args.inplace = False
-        args.dirty = False
-        return cmd_genbranch(args)
+        genbranch_args = parse_args(["genbranch", "--force"])
+        return cmd_genbranch(genbranch_args)
 
     return 0
 
