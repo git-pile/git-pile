@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from time import strftime
 
 from .helpers import error, info, fatal, warn
@@ -55,6 +55,7 @@ def assert_required_tools():
         # ¯\_(ツ)_/¯
         if git("range-diff -h", check=False, capture=False, stderr=nul_f).returncode != 129:
             fatal(error_msg_git)
+
 
 class Config:
     def __init__(self):
@@ -1291,7 +1292,10 @@ def _genbranch(root, patchesdir, config, args):
     patchlist = [op.join(patchesdir, p.strip())
             for p in open(op.join(patchesdir, "series")).readlines()
             if len(p.strip()) > 0 and p[0] != "#"]
+
     stdout = nul_f if args.quiet else sys.stdout
+    stderr = sys.stderr
+
     if not args.dirty:
         apply_cmd = ["am", "--no-3way"]
         if config.genbranch_committer_date_is_author_date:
@@ -1327,7 +1331,7 @@ def _genbranch(root, patchesdir, config, args):
         else:
             git("checkout -B %s %s" % (args.branch, baseline))
 
-        ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, env=env)
+        ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, stderr=stderr, env=env)
         if ret.returncode != 0:
             fatal("""Conflict encountered while applying pile patches.
 
@@ -1405,9 +1409,10 @@ def cmd_genlinear_branch(args):
 
                 try:
                     os.chdir(resultdir)
-                    _genbranch(root, piledir, config, genbranch_args)
-                    last_good_rev = rev
-                    tree = next((x for x in git("cat-file commit HEAD").stdout.split('\n') if x.startswith("tree")), None)
+                    with redirect_stdout(nul_f), redirect_stderr(nul_f):
+                        _genbranch(root, piledir, config, genbranch_args)
+                        tree = next((x for x in git("cat-file commit HEAD").stdout.strip().splitlines() if x.startswith("tree")), None)
+                        last_good_rev = rev
                 except:
                     if not parent_rev:
                         # EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
