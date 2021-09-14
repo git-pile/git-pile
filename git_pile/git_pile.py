@@ -16,7 +16,8 @@ from contextlib import contextmanager
 from time import strftime
 
 from .helpers import error, info, fatal, warn
-from .helpers import run_wrapper, set_debugging, orderedset, open_or_stdin, prompt_yesno
+from .helpers import run_wrapper, orderedset, open_or_stdin, prompt_yesno
+from .helpers import set_debugging, set_fatal_behavior
 from . import __version__
 
 try:
@@ -1378,9 +1379,89 @@ def cmd_genlinear_branch(args):
     if not config.check_is_valid():
         return 1
 
+    root = git_root()
     branch = config.linear_branch or args.branch
     if not branch:
         fatal("Branch not specified in command-line and not configured: use -b argument or configure in pile.linear-branch")
+
+    revs = git(f'rev-list --no-merges --reverse {config.pile_branch}').stdout.strip().split('\n')
+
+    with temporary_worktree(revs[0], root) as piledir:
+        # we have to checkout something in the directory we are going to
+        # genbranch in order to please git-worktree. However this is just a
+        # place to dump intermediate state that we are continuously resetting.
+        # BASELINE from the first rev is a good guesstimate, but it may not
+        # exist. In that case, just checkout anything, we are going to reset
+        # to a new commit as the first thing anyway
+        commit = get_baseline(piledir) or revs[0]
+        with temporary_worktree(commit, root) as resultdir:
+            last_good_rev = None
+            parent_rev = None
+            tree = None
+
+            # avoid exit() from genbranch - we want to recover and continue
+            set_fatal_behavior("raise")
+            genbranch_args = parse_args(["genbranch", "-i", "-q"])
+
+            for rev in revs:
+                git(f'-C {piledir} reset --hard {rev}')
+                info(f'Generating branch for {rev}')
+
+                try:
+                    os.chdir(resultdir)
+                    _genbranch(root, piledir, config, genbranch_args)
+                    last_good_rev = rev
+                    tree = next((x for x in git("cat-file commit HEAD").stdout.split('\n') if x.startswith("tree")), None)
+                except:
+                    if not parent_rev:
+                        # EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+                        # git("hash-object -t tree -w --stdin", stdin=nul_f).stdout.strip()
+                        tree = "tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+                    else:
+                        error(f"could not genbranch from {rev}.\nPrevious rev will be used and empty commit generated")
+                finally:
+                    os.chdir(root)
+
+                # Input to create new commit:
+                # tree comes from the result of genbranch
+                # parent comes from the previous result of genbranch, cached in parent_rev
+                # author, committer and commit message comes from the pile commit
+                if not tree:
+                    fatal(f"Unknown tree hash for commit {rev}")
+
+                commit_input = [tree]
+                if parent_rev:
+                    commit_input += [f"parent {parent_rev}"]
+
+                out = git(f"cat-file commit {rev}").stdout.strip().split('\n')
+                for idx, l in enumerate(out):
+                    if not l:
+                        break
+                    if l.startswith("tree") or l.startswith("parent"):
+                        continue
+                    commit_input += [l]
+                commit_input += out[idx:]
+
+                proc = subprocess.Popen(["git", "hash-object", "-t", "commit", "-w", "--stdin" ],
+                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True)
+                out, _ = proc.communicate("\n".join(commit_input))
+                if proc.returncode or not out:
+                    fatal(f"Couldn't create commit object for {rev} - {commit_input}")
+
+                parent_rev = out.strip()
+
+                # update notes
+                notes = f"pile-commit: {rev}"
+                if rev != last_good_rev and last_good_rev:
+                    notes += f"\npile-commit-reused: {last_good_rev}"
+                git(["notes", "add", "-f", "-m", notes, parent_rev])
+
+            if parent_rev:
+                git(f"update-ref refs/heads/{branch} {parent_rev}")
+
+    print("Done.")
+
+    return 0
 
 
 def cmd_baseline(args):
