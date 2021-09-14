@@ -6,6 +6,8 @@ import shlex
 import subprocess
 import sys
 
+from contextlib import contextmanager
+
 debug_run = False
 fatal_behavior = "exit"
 
@@ -155,3 +157,14 @@ def prompt_yesno(question, default):
         return False
     
     return default
+
+
+@contextmanager
+def pushdir(d, oldd):
+    if not oldd:
+        oldd = os.getcwd()
+    os.chdir(d)
+    try:
+        yield
+    finally:
+        os.chdir(oldd)
