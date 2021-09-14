@@ -16,7 +16,7 @@ from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from time import strftime
 
 from .helpers import error, info, fatal, warn
-from .helpers import run_wrapper, orderedset, open_or_stdin, prompt_yesno
+from .helpers import run_wrapper, orderedset, open_or_stdin, prompt_yesno, pushdir
 from .helpers import set_debugging, set_fatal_behavior
 from . import __version__
 
@@ -1408,8 +1408,7 @@ def cmd_genlinear_branch(args):
                 info(f'Generating branch for {rev}')
 
                 try:
-                    os.chdir(resultdir)
-                    with redirect_stdout(nul_f), redirect_stderr(nul_f):
+                    with redirect_stdout(nul_f), redirect_stderr(nul_f), pushdir(resultdir, root):
                         _genbranch(root, piledir, config, genbranch_args)
                         tree = next((x for x in git("cat-file commit HEAD").stdout.strip().splitlines() if x.startswith("tree")), None)
                         last_good_rev = rev
@@ -1420,8 +1419,6 @@ def cmd_genlinear_branch(args):
                         tree = "tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904"
                     else:
                         error(f"could not genbranch from {rev}.\nPrevious rev will be used and empty commit generated")
-                finally:
-                    os.chdir(root)
 
                 # Input to create new commit:
                 # tree comes from the result of genbranch
