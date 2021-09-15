@@ -1440,6 +1440,10 @@ def cmd_genlinear_branch(args):
                 except KeyboardInterrupt:
                     raise
                 except:
+                    # try to cleanup to recover checkout
+                    git_can_fail(f"-C {resultdir} am --abort", stderr=nul_f, stdout=nul_f)
+                    git_can_fail(f"-C {resultdir} cleant  -fxd", stderr=nul_f, stdout=nul_f)
+
                     if not parent_rev:
                         # EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
                         # git("hash-object -t tree -w --stdin", stdin=nul_f).stdout.strip()
