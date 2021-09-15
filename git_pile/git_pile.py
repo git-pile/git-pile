@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import timeit
 
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from time import strftime
@@ -1434,13 +1435,18 @@ def cmd_genlinear_branch(args):
             set_fatal_behavior("raise")
             genbranch_args = parse_args(["genbranch", "-i", "-q"])
 
-            for rev in revs:
+            total_revs = len(revs)
+
+            for idx, rev in enumerate(revs):
                 git(f'-C {piledir} reset --hard {rev}')
-                info(f'Generating branch for {rev}')
+                info(f'Generating branch for {rev} ({idx + 1}/{total_revs}) ', end='')
+                sys.stdout.flush()
+                ts0 = timeit.default_timer()
 
                 try:
                     with redirect_stdout(nul_f), redirect_stderr(nul_f), pushdir(resultdir, root):
                         _genbranch(root, piledir, config, genbranch_args)
+
                         tree = next((x for x in git("cat-file commit HEAD").stdout.strip().splitlines() if x.startswith("tree")), None)
                         last_good_rev = rev
                 except KeyboardInterrupt:
@@ -1450,12 +1456,16 @@ def cmd_genlinear_branch(args):
                     git_can_fail(f"-C {resultdir} am --abort", stderr=nul_f, stdout=nul_f)
                     git_can_fail(f"-C {resultdir} cleant  -fxd", stderr=nul_f, stdout=nul_f)
 
+                    print(f"[ {timeit.default_timer() - ts0:.2f}s ]")
+
                     if not parent_rev:
                         # EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
                         # git("hash-object -t tree -w --stdin", stdin=nul_f).stdout.strip()
                         tree = "tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904"
                     else:
                         error(f"could not genbranch from {rev}.\nPrevious rev will be used and empty commit generated")
+                else:
+                    print(f"[ {timeit.default_timer() - ts0:.2f}s ]")
 
                 # Input to create new commit:
                 # tree comes from the result of genbranch
