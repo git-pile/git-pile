@@ -1379,7 +1379,7 @@ def cmd_genbranch(args):
     return _genbranch(root, patchesdir, config, args)
 
 
-def get_pile_commit_range_from_linearized(incremental, pile_branch, linear_branch):
+def get_pile_commit_range_from_linearized(incremental, pile_branch, linear_branch, notes_ref):
     if not incremental:
         return None, pile_branch
 
@@ -1390,7 +1390,7 @@ def get_pile_commit_range_from_linearized(incremental, pile_branch, linear_branc
     revs = proc.stdout.strip().split('\n')
     key = "pile-commit: "
     for rev in revs:
-        notes = git(f"log --format=%N -1 {rev}").stdout.strip().split("\n")
+        notes = git(f"log --notes={notes_ref} --format=%N -1 {rev}").stdout.strip().split("\n")
         for n in notes:
             if n.startswith(key):
                 return n[len(key):], pile_branch
@@ -1408,7 +1408,8 @@ def cmd_genlinear_branch(args):
     if not branch:
         fatal("Branch not specified in command-line and not configured: use -b argument or configure in pile.linear-branch")
 
-    start_ref, end_ref = get_pile_commit_range_from_linearized(args.incremental, config.pile_branch, branch)
+    notes_ref = "git-pile-genlinear-branch"
+    start_ref, end_ref = get_pile_commit_range_from_linearized(args.incremental, config.pile_branch, branch, notes_ref)
     parent_rev = start_ref
     commit_range = f"{start_ref}..{end_ref}" if parent_rev else end_ref
 
@@ -1488,7 +1489,7 @@ def cmd_genlinear_branch(args):
                 notes = f"pile-commit: {rev}"
                 if rev != last_good_rev and last_good_rev:
                     notes += f"\npile-commit-reused: {last_good_rev}"
-                git(["notes", "add", "-f", "-m", notes, parent_rev])
+                git(["notes", f"--ref={notes_ref}", "add", "-f", "-m", notes, parent_rev])
 
                 if parent_rev:
                     git(f"update-ref refs/heads/{branch} {parent_rev}")
