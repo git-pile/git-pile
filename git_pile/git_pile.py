@@ -1289,9 +1289,12 @@ def _genbranch(root, patchesdir, config, args):
     # Make sure the baseline hasn't been pruned
     check_baseline_exists(baseline);
 
-    patchlist = [op.join(patchesdir, p.strip())
-            for p in open(op.join(patchesdir, "series")).readlines()
-            if len(p.strip()) > 0 and p[0] != "#"]
+    try:
+        patchlist = [op.join(patchesdir, p.strip())
+                for p in open(op.join(patchesdir, "series")).readlines()
+                if len(p.strip()) > 0 and p[0] != "#"]
+    except FileNotFoundError:
+        patchlist = []
 
     stdout = nul_f if args.quiet else sys.stdout
     stderr = sys.stderr
@@ -1331,9 +1334,10 @@ def _genbranch(root, patchesdir, config, args):
         else:
             git("checkout -B %s %s" % (args.branch, baseline))
 
-        ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, stderr=stderr, env=env, start_new_session=True)
-        if ret.returncode != 0:
-            fatal("""Conflict encountered while applying pile patches.
+        if patchlist:
+            ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, stderr=stderr, env=env, start_new_session=True)
+            if ret.returncode != 0:
+                fatal("""Conflict encountered while applying pile patches.
 
 Please resolve the conflict, then run "git am --continue" to continue applying
 pile patches.""")
@@ -1350,7 +1354,8 @@ pile patches.""")
             error("can't use branch '%s' because it is checked out at '%s'" % (branch, path))
             return 1
 
-        git(["-C", d] + apply_cmd + patchlist, stdout=stdout)
+        if patchlist:
+            git(["-C", d] + apply_cmd + patchlist, stdout=stdout)
 
         if args.dirty:
             raise temporary_worktree.Break
