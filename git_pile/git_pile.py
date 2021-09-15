@@ -1331,7 +1331,7 @@ def _genbranch(root, patchesdir, config, args):
         else:
             git("checkout -B %s %s" % (args.branch, baseline))
 
-        ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, stderr=stderr, env=env)
+        ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, stderr=stderr, env=env, start_new_session=True)
         if ret.returncode != 0:
             fatal("""Conflict encountered while applying pile patches.
 
@@ -1437,6 +1437,8 @@ def cmd_genlinear_branch(args):
                         _genbranch(root, piledir, config, genbranch_args)
                         tree = next((x for x in git("cat-file commit HEAD").stdout.strip().splitlines() if x.startswith("tree")), None)
                         last_good_rev = rev
+                except KeyboardInterrupt:
+                    raise
                 except:
                     if not parent_rev:
                         # EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -1479,8 +1481,8 @@ def cmd_genlinear_branch(args):
                     notes += f"\npile-commit-reused: {last_good_rev}"
                 git(["notes", "add", "-f", "-m", notes, parent_rev])
 
-            if parent_rev:
-                git(f"update-ref refs/heads/{branch} {parent_rev}")
+                if parent_rev:
+                    git(f"update-ref refs/heads/{branch} {parent_rev}")
 
     print("Done.")
 
