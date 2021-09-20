@@ -1301,7 +1301,7 @@ def _genbranch(root, patchesdir, config, args):
     stderr = sys.stderr
 
     if not args.dirty:
-        apply_cmd = ["am", "--no-3way"]
+        apply_cmd = ["-c", "core.splitIndex=true", "am", "--no-3way"]
         if config.genbranch_committer_date_is_author_date:
             apply_cmd.append("--committer-date-is-author-date")
         if args.fix_whitespace:
