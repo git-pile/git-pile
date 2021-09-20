@@ -192,6 +192,21 @@ def git_worktree_get_git_dir(path='.'):
     return git("-C %s rev-parse --git-dir" % path).stdout.strip("\n")
 
 
+@contextmanager
+def git_split_index(path='.'):
+    # only change if not explicitely configure in config
+    change_split_index = git_can_fail(f'-C {path} config --get core.splitIndex').returncode != 0
+
+    try:
+        if change_split_index:
+            git(f'-C {path} update-index --split-index')
+
+        yield
+    finally:
+        if change_split_index:
+            git(f'-C {path} update-index --no-split-index')
+
+
 def _parse_baseline_line(iterable):
     for l in iterable:
         if l.startswith("BASELINE="):
@@ -1339,7 +1354,9 @@ def _genbranch(root, patchesdir, config, args):
             git("checkout -B %s %s" % (args.branch, baseline))
 
         if patchlist:
-            ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, stderr=stderr, env=env, start_new_session=True)
+            with git_split_index():
+                ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, stderr=stderr, env=env, start_new_session=True)
+
             if ret.returncode != 0:
                 fatal("""Conflict encountered while applying pile patches.
 
