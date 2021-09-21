@@ -650,7 +650,7 @@ def genpatches(output, base_commit, result_commit):
     return 0
 
 
-def get_cover_letter_message(commit_with_message, file_with_message):
+def get_cover_letter_message(commit_with_message, file_with_message, signoff):
     if file_with_message:
         with open_or_stdin(file_with_message, "r") as f:
             subject = f.readline().strip()
@@ -661,6 +661,11 @@ def get_cover_letter_message(commit_with_message, file_with_message):
     else:
         subject = "*** SUBJECT HERE ***"
         body = "*** BLURB HERE ***"
+
+    if signoff:
+        user = git("config --get user.name").stdout.strip()
+        email = git("config --get user.email").stdout.strip()
+        body += f"\n\nSigned-off-by: {user} <{email}>"
 
     return subject, body
 
@@ -1143,7 +1148,7 @@ option to this command.""")
 
     zero_fill = int(log10_or_zero(total_patches)) + 1
 
-    cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file)
+    cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file, args.signoff)
     cover = gen_cover_letter(diff, output, total_patches, newbaseline,
                              git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
                              prefix, range_diff_commits, config.format_add_header,
@@ -1612,6 +1617,11 @@ series  config  X'.patch  Y'.patch  Z'.patch
         '-F', '--file',
         help="Take the commit message from the given file. Use - to read the message from the standard input. Like documented in GIT-COMMIT(1)",
         metavar="FILE")
+    parser_format_patch.add_argument(
+        '--signoff',
+        help="Add s-o-b to the cover letter, like git-merge --signoff or git-commit --signoff do",
+        action="store_true",
+        default=False)
     parser_format_patch.add_argument(
         "refs",
         help="""
