@@ -17,7 +17,6 @@ from time import strftime
 
 from .helpers import error, info, fatal, warn
 from .helpers import run_wrapper, set_debugging, orderedset, open_or_stdin, prompt_yesno
->>>>>>> a9e08e6 (am: prompt user about auto-solve if --fuzzy it not specified)
 from . import __version__
 
 try:
