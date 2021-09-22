@@ -1699,7 +1699,6 @@ shortcut. From more verbose to the easiest ones:
             "--debug",
             help="Turn on debugging output",
             action="store_true", default=False)
-        subp.add_argument('-v', '--version', action='version', version='git-pile ' + __version__)
 
     parser.add_argument('-v', '--version', action='version', version='git-pile ' + __version__)
 
