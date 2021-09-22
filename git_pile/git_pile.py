@@ -650,7 +650,7 @@ def genpatches(output, base_commit, result_commit):
     return 0
 
 
-def get_cover_letter_message(commit_with_message, file_with_message):
+def get_cover_letter_message(commit_with_message, file_with_message, signoff):
     if file_with_message:
         with open_or_stdin(file_with_message, "r") as f:
             subject = f.readline().strip()
@@ -661,6 +661,11 @@ def get_cover_letter_message(commit_with_message, file_with_message):
     else:
         subject = "*** SUBJECT HERE ***"
         body = "*** BLURB HERE ***"
+
+    if signoff:
+        user = git("config --get user.name").stdout.strip()
+        email = git("config --get user.email").stdout.strip()
+        body += f"\n\nSigned-off-by: {user} <{email}>"
 
     return subject, body
 
@@ -676,8 +681,7 @@ def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, prefix, ran
     reduced_range_diff = "\n".join(list(filter(lambda x: x and x.split(maxsplit=3)[2] in "!><", range_diff_commits)))
 
     zero_fill = int(log10_or_zero(n_patches)) + 1
-    cover = op.join(output, "0000-cover-letter.patch")
-    with open(cover, "w") as f:
+    with open(output, "w") as f:
         f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
 Date: {date}
@@ -703,7 +707,6 @@ range-diff:
 
         f.write("--\ngit-pile {version}\n\n".format(version=__version__))
 
-    return cover
 
 def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, newref, prefix, add_header):
     user = git("config --get user.name").stdout.strip()
@@ -711,8 +714,7 @@ def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, new
     # RFC 2822-compliant date format
     now = strftime("%a, %d %b %Y %T %z")
 
-    fn = op.join(output, "{n_patches:04d}-full-tree-diff.patch".format(n_patches=n_patches))
-    with open(fn, "w") as f:
+    with open(output, "w") as f:
         f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
 Date: {date}
@@ -733,7 +735,6 @@ Auto-generated diff between {oldref}..{newref}
 
         f.write("--\ngit-pile {version}\n\n".format(version=__version__))
 
-    return fn
 
 def cmd_genpatches(args):
     config = Config()
@@ -1197,6 +1198,13 @@ option to this command.""")
     os.makedirs(output or '.', exist_ok=True)
     rm_patches(output or '.')
 
+    total_patches = len(a_commits)
+    if not args.no_full_patch:
+        total_patches += 1
+
+    cover_fn = "0000-cover-letter.patch"
+    full_tree_patch_fn = f"{total_patches:04d}-full-tree-diff.patch"
+
     if args.subject_prefix:
         prefix = args.subject_prefix
     else:
@@ -1205,18 +1213,22 @@ option to this command.""")
         except subprocess.CalledProcessError:
             prefix = "PATCH"
 
-    total_patches = len(a_commits)
-    if not args.no_full_patch:
-        total_patches += 1
+    if args.reroll_count:
+        reroll_count_str = f"v{args.reroll_count}"
+        prefix = f"{prefix} {reroll_count_str}"
+        cover_fn = f"{reroll_count_str}-{cover_fn}"
+        full_tree_patch_fn = f"{reroll_count_str}-{full_tree_patch_fn}"
+    else:
+        reroll_count_str = ""
 
     zero_fill = int(log10_or_zero(total_patches)) + 1
 
-    cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file)
-    cover = gen_cover_letter(diff, output, total_patches, newbaseline,
-                             git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
-                             prefix, range_diff_commits, config.format_add_header,
-                             cover_subject, cover_body)
-    print(cover)
+    cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file, args.signoff)
+    gen_cover_letter(diff, op.join(output, cover_fn), total_patches, newbaseline,
+                     git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
+                     prefix, range_diff_commits, config.format_add_header,
+                     cover_subject, cover_body)
+    print(op.join(output, cover_fn))
 
     with tempfile.TemporaryDirectory() as d:
         for i, c in enumerate(a_commits):
@@ -1226,7 +1238,9 @@ option to this command.""")
             format_cmd.extend(["-o", d, "-N", "-1", c[1]])
 
             old = git(format_cmd).stdout.strip()
-            new = op.join(output, "%04d-%s" % (i + 1, old[len(d) + 1 + 5:]))
+            new = op.join(output, "%s%04d-%s" % (f"{reroll_count_str}-" if reroll_count_str else "",
+                                                 i + 1,
+                                                 old[len(d) + 1 + 5:]))
 
             # Copy patches to the final output direcory fixing the Subject
             # lines to conform with the patch order and prefix
@@ -1259,11 +1273,10 @@ option to this command.""")
             print(new)
 
         if not args.no_full_patch:
-            tail = gen_full_tree_patch(output, total_patches,
-                                       oldbaseline, newbaseline, oldref, newref,
-                                       prefix, config.format_add_header)
-            if tail:
-                print(tail)
+            gen_full_tree_patch(op.join(output, full_tree_patch_fn), total_patches,
+                                oldbaseline, newbaseline, oldref, newref,
+                                prefix, config.format_add_header)
+            print(op.join(output, full_tree_patch_fn))
 
     return 0
 
@@ -1681,6 +1694,15 @@ series  config  X'.patch  Y'.patch  Z'.patch
         help="Take the commit message from the given file. Use - to read the message from the standard input. Like documented in GIT-COMMIT(1)",
         metavar="FILE")
     parser_format_patch.add_argument(
+        '--signoff',
+        help="Add s-o-b to the cover letter, like git-merge --signoff or git-commit --signoff do",
+        action="store_true",
+        default=False)
+    parser_format_patch.add_argument(
+        '--reroll-count', '-v',
+        help="Mark the series as the <n>-th iteration of the topic. This mimics the same behavior from git-format-patch",
+        action="store")
+    parser_format_patch.add_argument(
         "refs",
         help="""
 Same arguments as the ones received by range-diff in its several forms plus a
@@ -1770,7 +1792,6 @@ shortcut. From more verbose to the easiest ones:
             "--debug",
             help="Turn on debugging output",
             action="store_true", default=False)
-        subp.add_argument('-v', '--version', action='version', version='git-pile ' + __version__)
 
     parser.add_argument('-v', '--version', action='version', version='git-pile ' + __version__)
 
