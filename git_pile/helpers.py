@@ -120,3 +120,26 @@ def warn(s, *args, **kwargs):
 
 def orderedset(it):
     return dict.fromkeys(it).keys()
+
+
+def prompt_yesno(question, default):
+    if default is None:
+        choices = ' [y/n]: '
+        default_reply = None
+    elif not default:
+        choices = ' [y/N]: '
+        default_reply = 'n'
+    else:
+        choices = ' [Y/n]: '
+        default_reply = 'y'
+
+    reply = None
+    while reply is None:
+        reply = str(input(question + choices)).lower().strip() or default_reply
+
+    if reply[0] == 'y':
+        return True
+    if reply[0] == 'n':
+        return False
+    
+    return default
