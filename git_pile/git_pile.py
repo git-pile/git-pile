@@ -197,14 +197,24 @@ def git_split_index(path='.'):
     # only change if not explicitely configure in config
     change_split_index = git_can_fail(f'-C {path} config --get core.splitIndex').returncode != 0
 
+    if not change_split_index:
+        try:
+            yield
+        finally:
+            return
+
+    change_shared_index_expire = git_can_fail(f'-C {path} config --get splitIndex.sharedIndexExpire').returncode != 0
+
     try:
-        if change_split_index:
-            git(f'-C {path} update-index --split-index')
+        git(f'-C {path} update-index --split-index')
+        if change_shared_index_expire:
+            git(f'-C {path} config splitIndex.sharedIndexExpire now')
 
         yield
     finally:
-        if change_split_index:
-            git(f'-C {path} update-index --no-split-index')
+        git(f'-C {path} update-index --no-split-index')
+        if change_shared_index_expire:
+            git(f'-C {path} config --unset splitIndex.sharedIndexExpire')
 
 
 def _parse_baseline_line(iterable):
