@@ -1757,7 +1757,8 @@ shortcut. From more verbose to the easiest ones:
     parser_am.add_argument(
         "--no-fuzzy",
         action="store_false",
-        dest="fuzzy")
+        dest="fuzzy",
+        default=None)
     parser_am.add_argument(
         "--fuzzy",
         help="Allow to apply a patch even with conflicts in the diff hunk line numbers. "
@@ -1765,7 +1766,8 @@ shortcut. From more verbose to the easiest ones:
              "by taking `theirs` version as the correct. See 'HOW CONFLICTS ARE PRESENTED' in "
              "GIT-MERGE(1) [Default: prompt if running on terminal, otherwise no]",
         action="store_true",
-        dest="fuzzy")
+        dest="fuzzy",
+        default=None)
     parser_am.set_defaults(func=cmd_am)
 
     # baseline
