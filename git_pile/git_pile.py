@@ -1384,8 +1384,11 @@ def cmd_genbranch(args):
 
     return _genbranch(root, patchesdir, config, args)
 
-
-def get_pile_commit_range_from_linearized(incremental, pile_branch, linear_branch, notes_ref):
+# returns (top_linear_ref, refspec)
+# - top_linear_ref is the the latest ref from the linearized branch if we have one
+# - refspec is something suitable to pass to rev-list/log to get the missing
+#   refs from pile branch
+def get_refs_from_linearized(incremental, pile_branch, linear_branch, notes_ref):
     if not incremental:
         return None, pile_branch
 
@@ -1399,7 +1402,7 @@ def get_pile_commit_range_from_linearized(incremental, pile_branch, linear_branc
         notes = git(f"log --notes={notes_ref} --format=%N -1 {ref}").stdout.strip().split("\n")
         for n in notes:
             if n.startswith(key):
-                return n[len(key):], pile_branch
+                return refs[0], f"{n[len(key):]}..{pile_branch}"
 
     return None, pile_branch
 
@@ -1415,11 +1418,9 @@ def cmd_genlinear_branch(args):
         fatal("Branch not specified in command-line and not configured: use -b argument or configure in pile.linear-branch")
 
     notes_ref = "git-pile-genlinear-branch"
-    start_ref, end_ref = get_pile_commit_range_from_linearized(args.incremental, config.pile_branch, branch, notes_ref)
-    parent_ref = start_ref
-    commit_range = f"{start_ref}..{end_ref}" if parent_ref else end_ref
 
-    refs = git(f'rev-list --no-merges --reverse {commit_range}').stdout.strip().splitlines()
+    parent_ref, pile_range = get_refs_from_linearized(args.incremental, config.pile_branch, branch, notes_ref)
+    refs = git(f'rev-list --no-merges --reverse {pile_range}').stdout.strip().splitlines()
     if not refs:
         info("Nothing to do.")
         return 0
