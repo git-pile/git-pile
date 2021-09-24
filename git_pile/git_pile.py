@@ -129,6 +129,10 @@ def git_branch_exists(branch):
     return git("show-ref --verify --quiet refs/heads/%s" % branch, check=False).returncode == 0
 
 
+def git_ref_exists(ref):
+    return git(f"show-ref --verify --quiet {ref}", check=False).returncode == 0
+
+
 def git_remote_branch_exists(remote_and_branch):
     return git("show-ref --verify --quiet refs/remotes/%s" % remote_and_branch, check=False).returncode == 0
 
