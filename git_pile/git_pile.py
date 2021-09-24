@@ -1417,7 +1417,7 @@ def cmd_genlinear_branch(args):
     if not branch:
         fatal("Branch not specified in command-line and not configured: use -b argument or configure in pile.linear-branch")
 
-    notes_ref = "git-pile-genlinear-branch"
+    notes_ref = branch
 
     parent_ref, pile_range = get_refs_from_linearized(args.incremental, config.pile_branch, branch, notes_ref)
     refs = git(f'rev-list --no-merges --reverse {pile_range}').stdout.strip().splitlines()
