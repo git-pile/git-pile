@@ -1393,10 +1393,10 @@ def get_pile_commit_range_from_linearized(incremental, pile_branch, linear_branc
     if proc.returncode or not proc.stdout:
         return None, pile_branch
 
-    revs = proc.stdout.strip().split('\n')
+    refs = proc.stdout.strip().split('\n')
     key = "pile-commit: "
-    for rev in revs:
-        notes = git(f"log --notes={notes_ref} --format=%N -1 {rev}").stdout.strip().split("\n")
+    for ref in refs:
+        notes = git(f"log --notes={notes_ref} --format=%N -1 {ref}").stdout.strip().split("\n")
         for n in notes:
             if n.startswith(key):
                 return n[len(key):], pile_branch
@@ -1416,35 +1416,35 @@ def cmd_genlinear_branch(args):
 
     notes_ref = "git-pile-genlinear-branch"
     start_ref, end_ref = get_pile_commit_range_from_linearized(args.incremental, config.pile_branch, branch, notes_ref)
-    parent_rev = start_ref
-    commit_range = f"{start_ref}..{end_ref}" if parent_rev else end_ref
+    parent_ref = start_ref
+    commit_range = f"{start_ref}..{end_ref}" if parent_ref else end_ref
 
-    revs = git(f'rev-list --no-merges --reverse {commit_range}').stdout.strip().splitlines()
-    if not revs:
+    refs = git(f'rev-list --no-merges --reverse {commit_range}').stdout.strip().splitlines()
+    if not refs:
         info("Nothing to do.")
         return 0
 
-    with temporary_worktree(revs[0], root) as piledir:
+    with temporary_worktree(refs[0], root) as piledir:
         # we have to checkout something in the directory we are going to
         # genbranch in order to please git-worktree. However this is just a
         # place to dump intermediate state that we are continuously resetting.
         # BASELINE from the first rev is a good guesstimate, but it may not
         # exist. In that case, just checkout anything, we are going to reset
         # to a new commit as the first thing anyway
-        commit = get_baseline(piledir) or revs[0]
+        commit = get_baseline(piledir) or refs[0]
         with temporary_worktree(commit, root) as resultdir:
-            last_good_rev = None
-            tree = "tree " + git(f"log --format=%T -1 {parent_rev}").stdout.strip() if parent_rev else None
+            last_good_ref = None
+            tree = "tree " + git(f"log --format=%T -1 {parent_ref}").stdout.strip() if parent_ref else None
 
             # avoid exit() from genbranch - we want to recover and continue
             set_fatal_behavior("raise")
             genbranch_args = parse_args(["genbranch", "-i", "-q"])
 
-            total_revs = len(revs)
+            total_refs = len(refs)
 
-            for idx, rev in enumerate(revs):
+            for idx, rev in enumerate(refs):
                 git(f'-C {piledir} reset --hard {rev}')
-                info(f'Generating branch for {rev} ({idx + 1}/{total_revs}) ', end='')
+                info(f'Generating branch for {rev} ({idx + 1}/{total_refs}) ', end='')
                 sys.stdout.flush()
                 ts0 = timeit.default_timer()
 
@@ -1453,7 +1453,7 @@ def cmd_genlinear_branch(args):
                         _genbranch(root, piledir, config, genbranch_args)
 
                         tree = next((x for x in git("cat-file commit HEAD").stdout.strip().splitlines() if x.startswith("tree")), None)
-                        last_good_rev = rev
+                        last_good_ref = rev
                 except KeyboardInterrupt:
                     raise
                 except:
@@ -1463,7 +1463,7 @@ def cmd_genlinear_branch(args):
 
                     print(f"[ {timeit.default_timer() - ts0:.2f}s ]")
 
-                    if not parent_rev:
+                    if not parent_ref:
                         # EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
                         # git("hash-object -t tree -w --stdin", stdin=nul_f).stdout.strip()
                         tree = "tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -1474,14 +1474,14 @@ def cmd_genlinear_branch(args):
 
                 # Input to create new commit:
                 # tree comes from the result of genbranch
-                # parent comes from the previous result of genbranch, cached in parent_rev
+                # parent comes from the previous result of genbranch, cached in parent_ref
                 # author, committer and commit message comes from the pile commit
                 if not tree:
                     fatal(f"Unknown tree hash for commit {rev}")
 
                 commit_input = [tree]
-                if parent_rev:
-                    commit_input += [f"parent {parent_rev}"]
+                if parent_ref:
+                    commit_input += [f"parent {parent_ref}"]
 
                 out = git(f"cat-file commit {rev}").stdout.strip().split('\n')
                 for idx, l in enumerate(out):
@@ -1498,16 +1498,16 @@ def cmd_genlinear_branch(args):
                 if proc.returncode or not out:
                     fatal(f"Couldn't create commit object for {rev} - {commit_input}")
 
-                parent_rev = out.strip()
+                parent_ref = out.strip()
 
                 # update notes
                 notes = f"pile-commit: {rev}"
-                if rev != last_good_rev and last_good_rev:
-                    notes += f"\npile-commit-reused: {last_good_rev}"
-                git(["notes", f"--ref={notes_ref}", "add", "-f", "-m", notes, parent_rev])
+                if rev != last_good_ref and last_good_ref:
+                    notes += f"\npile-commit-reused: {last_good_ref}"
+                git(["notes", f"--ref={notes_ref}", "add", "-f", "-m", notes, parent_ref])
 
-                if parent_rev:
-                    git(f"update-ref refs/heads/{branch} {parent_rev}")
+                if parent_ref:
+                    git(f"update-ref refs/heads/{branch} {parent_ref}")
 
     print("Done.")
 
