@@ -917,7 +917,9 @@ def git_am_solve_diff_hunk_conflicts(args, patchesdir):
 
     # solve UU conflicts only, we don't really know how to resolve the others
     for f in status:
-        if not f.startswith("UU"):
+        if f[0] != 'U' and f[1] != 'U':
+            continue
+        if (f[0] == 'U') ^ (f[1] == 'U'):
             resolved = False
             continue
 
