@@ -973,7 +973,7 @@ def cmd_am(args):
     if proc.returncode != 0:
         if git_am_solve_diff_hunk_conflicts(args, patchesdir):
             info("Yay, fixed!")
-            git("am -C {patchesdir} --continue")
+            git(f"-C {patchesdir} am --continue")
             proc.returncode = 0
 
     if proc.returncode != 0:
