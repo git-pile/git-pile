@@ -917,7 +917,9 @@ def git_am_solve_diff_hunk_conflicts(args, patchesdir):
 
     # solve UU conflicts only, we don't really know how to resolve the others
     for f in status:
-        if not f.startswith("UU"):
+        if f[0] != 'U' and f[1] != 'U':
+            continue
+        if (f[0] == 'U') ^ (f[1] == 'U'):
             resolved = False
             continue
 
@@ -958,6 +960,9 @@ def cmd_am(args):
         return 1
 
     info("Entering '%s' directory" % config.dir)
+    gitdir = git_worktree_get_git_dir()
+    if op.isdir(op.join(gitdir, "rebase-apply")):
+        fatal("Already on an am or rebase operation", file=sys.stderr)
 
     if args.strategy == "pile-commit":
         if git(["-C", patchesdir, "reset", "--hard", cover.pile_commit], check=False).returncode != 0:
@@ -971,7 +976,7 @@ def cmd_am(args):
     if proc.returncode != 0:
         if git_am_solve_diff_hunk_conflicts(args, patchesdir):
             info("Yay, fixed!")
-            git("am -C {patchesdir} --continue")
+            git(f"-C {patchesdir} am --continue")
             proc.returncode = 0
 
     if proc.returncode != 0:
@@ -1757,7 +1762,8 @@ shortcut. From more verbose to the easiest ones:
     parser_am.add_argument(
         "--no-fuzzy",
         action="store_false",
-        dest="fuzzy")
+        dest="fuzzy",
+        default=None)
     parser_am.add_argument(
         "--fuzzy",
         help="Allow to apply a patch even with conflicts in the diff hunk line numbers. "
@@ -1765,7 +1771,8 @@ shortcut. From more verbose to the easiest ones:
              "by taking `theirs` version as the correct. See 'HOW CONFLICTS ARE PRESENTED' in "
              "GIT-MERGE(1) [Default: prompt if running on terminal, otherwise no]",
         action="store_true",
-        dest="fuzzy")
+        dest="fuzzy",
+        default=None)
     parser_am.set_defaults(func=cmd_am)
 
     # baseline
