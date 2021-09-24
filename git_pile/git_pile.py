@@ -1396,6 +1396,9 @@ def get_refs_from_linearized(incremental, pile_branch, linear_branch, notes_ref)
     if not incremental:
         return None, pile_branch
 
+    if not git_ref_exists(f"refs/notes/{linear_branch}"):
+        return None, pile_branch
+
     proc = git_can_fail(f'rev-list --no-merges {linear_branch}', stderr=nul_f)
     if proc.returncode or not proc.stdout:
         return None, pile_branch
