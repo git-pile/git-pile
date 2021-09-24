@@ -556,11 +556,9 @@ def parse_commit_range(commit_range, pile_dir, default_end):
     return base, result
 
 
-def copy_sanitized_patch(p, outputdir):
-    fn = op.join(outputdir, op.basename(p))
-
+def copy_sanitized_patch(p, pnew):
     with open(p, "r") as oldf:
-        with open(fn, "w") as newf:
+        with open(pnew, "w") as newf:
             it = iter(oldf)
 
             # everything before the diff is allowed
@@ -637,16 +635,16 @@ def genpatches(output, base_commit, result_commit):
     # to the final destination - we can use os.rename() since we are creating
     # the directory and using a subdir as staging
     with tempfile.TemporaryDirectory() as d:
-        for idx, c in enumerate(commit_list):
-            with open(op.join(d, series[idx]), "w+") as f:
-                git(["format-patch", "--no-add-header", "--no-cc", "--subject-prefix=PATCH",
-                     "--zero-commit", "--signature=", "--stdout", "-N", "-1", c], stdout=f)
+        proc = git(["format-patch", "--no-add-header", "--no-cc", "--subject-prefix=PATCH",
+                    "--zero-commit", "--signature=", "-N", '-o', d, commit_range])
+
+        patches = proc.stdout.strip().splitlines()
 
         os.makedirs(output, exist_ok=True)
         rm_patches(output)
 
-        for p in series:
-            copy_sanitized_patch(op.join(d, p), output)
+        for pold, pnew in zip(patches, series):
+            copy_sanitized_patch(pold, op.join(output, pnew))
 
     update_series(output, series)
     update_baseline(output, base_commit)
