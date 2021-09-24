@@ -6,11 +6,19 @@ import shlex
 import subprocess
 import sys
 
+from contextlib import contextmanager
+
 debug_run = False
+fatal_behavior = "exit"
 
 def set_debugging(val):
     global debug_run
     debug_run = val
+
+
+def set_fatal_behavior(s):
+    global fatal_behavior
+    fatal_behavior = s
 
 
 # Like open(), but reserves file == "-", file == "" or file == None for stdin
@@ -101,11 +109,17 @@ def info(s, *args, **kwargs):
 
     print(*sl, **kwargs)
 
+class FatalException(Exception):
+    """Fatal exception, can't continue"""
+    pass
+
 
 def fatal(s, *args, **kwargs):
     kwargs.setdefault("file", sys.stderr)
     print("fatal:", s, *args, **kwargs)
-    sys.exit(1)
+    if fatal_behavior == "exit":
+        sys.exit(1)
+    raise FatalException()
 
 
 def error(s, *args, **kwargs):
@@ -143,3 +157,14 @@ def prompt_yesno(question, default):
         return False
     
     return default
+
+
+@contextmanager
+def pushdir(d, oldd):
+    if not oldd:
+        oldd = os.getcwd()
+    os.chdir(d)
+    try:
+        yield
+    finally:
+        os.chdir(oldd)

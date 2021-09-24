@@ -11,12 +11,14 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import timeit
 
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from time import strftime
 
 from .helpers import error, info, fatal, warn
-from .helpers import run_wrapper, set_debugging, orderedset, open_or_stdin, prompt_yesno
+from .helpers import run_wrapper, orderedset, open_or_stdin, prompt_yesno, pushdir
+from .helpers import set_debugging, set_fatal_behavior
 from . import __version__
 
 try:
@@ -55,6 +57,7 @@ def assert_required_tools():
         if git("range-diff -h", check=False, capture=False, stderr=nul_f).returncode != 129:
             fatal(error_msg_git)
 
+
 class Config:
     def __init__(self):
         self.dir = ""
@@ -62,6 +65,7 @@ class Config:
         self.pile_branch = ""
         self.format_add_header = ""
         self.format_output_directory = ""
+        self.linear_branch = ""
         self.genbranch_committer_date_is_author_date = True
         self.genbranch_user_name = None
         self.genbranch_user_email = None
@@ -991,12 +995,8 @@ Good luck! ¯\_(ツ)_/¯"""  % (config.dir, config.pile_branch))
 
     if args.genbranch:
         info("Generating branch '%s'" % config.result_branch)
-        args.force = True
-        args.branch = None
-        args.quiet = False
-        args.inplace = False
-        args.dirty = False
-        return cmd_genbranch(args)
+        genbranch_args = parse_args(["genbranch", "--force"])
+        return cmd_genbranch(genbranch_args)
 
     return 0
 
@@ -1285,24 +1285,28 @@ option to this command.""")
 
     return 0
 
-def cmd_genbranch(args):
-    config = Config()
+
+def _genbranch(root, patchesdir, config, args):
     if not config.check_is_valid():
         return 1
 
-    root = git_root()
-    patchesdir = op.join(root, config.dir)
     baseline = get_baseline(patchesdir)
 
     # Make sure the baseline hasn't been pruned
     check_baseline_exists(baseline);
 
-    patchlist = [op.join(patchesdir, p.strip())
-            for p in open(op.join(patchesdir, "series")).readlines()
-            if len(p.strip()) > 0 and p[0] != "#"]
+    try:
+        patchlist = [op.join(patchesdir, p.strip())
+                for p in open(op.join(patchesdir, "series")).readlines()
+                if len(p.strip()) > 0 and p[0] != "#"]
+    except FileNotFoundError:
+        patchlist = []
+
     stdout = nul_f if args.quiet else sys.stdout
+    stderr = sys.stderr
+
     if not args.dirty:
-        apply_cmd = ["am", "--no-3way"]
+        apply_cmd = ["-c", "core.splitIndex=true", "am", "--no-3way"]
         if config.genbranch_committer_date_is_author_date:
             apply_cmd.append("--committer-date-is-author-date")
         if args.fix_whitespace:
@@ -1336,9 +1340,10 @@ def cmd_genbranch(args):
         else:
             git("checkout -B %s %s" % (args.branch, baseline))
 
-        ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, env=env)
-        if ret.returncode != 0:
-            fatal("""Conflict encountered while applying pile patches.
+        if patchlist:
+            ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, stderr=stderr, env=env, start_new_session=True)
+            if ret.returncode != 0:
+                fatal("""Conflict encountered while applying pile patches.
 
 Please resolve the conflict, then run "git am --continue" to continue applying
 pile patches.""")
@@ -1355,7 +1360,8 @@ pile patches.""")
             error("can't use branch '%s' because it is checked out at '%s'" % (branch, path))
             return 1
 
-        git(["-C", d] + apply_cmd + patchlist, stdout=stdout)
+        if patchlist:
+            git(["-C", d] + apply_cmd + patchlist, stdout=stdout)
 
         if args.dirty:
             raise temporary_worktree.Break
@@ -1367,6 +1373,143 @@ pile patches.""")
             git("-C %s reset --hard %s" % (path, head), stdout=nul_f, stderr=nul_f)
         else:
             git("-C %s checkout -f -B %s %s" % (d, branch, head), stdout=nul_f, stderr=nul_f)
+
+    return 0
+
+
+def cmd_genbranch(args):
+    config = Config()
+    root = git_root()
+    patchesdir = op.join(root, config.dir)
+
+    return _genbranch(root, patchesdir, config, args)
+
+
+def get_pile_commit_range_from_linearized(incremental, pile_branch, linear_branch, notes_ref):
+    if not incremental:
+        return None, pile_branch
+
+    proc = git_can_fail(f'rev-list --no-merges {linear_branch}', stderr=nul_f)
+    if proc.returncode or not proc.stdout:
+        return None, pile_branch
+
+    revs = proc.stdout.strip().split('\n')
+    key = "pile-commit: "
+    for rev in revs:
+        notes = git(f"log --notes={notes_ref} --format=%N -1 {rev}").stdout.strip().split("\n")
+        for n in notes:
+            if n.startswith(key):
+                return n[len(key):], pile_branch
+
+    return None, pile_branch
+
+
+def cmd_genlinear_branch(args):
+    config = Config()
+    if not config.check_is_valid():
+        return 1
+
+    root = git_root()
+    branch = config.linear_branch or args.branch
+    if not branch:
+        fatal("Branch not specified in command-line and not configured: use -b argument or configure in pile.linear-branch")
+
+    notes_ref = "git-pile-genlinear-branch"
+    start_ref, end_ref = get_pile_commit_range_from_linearized(args.incremental, config.pile_branch, branch, notes_ref)
+    parent_rev = start_ref
+    commit_range = f"{start_ref}..{end_ref}" if parent_rev else end_ref
+
+    revs = git(f'rev-list --no-merges --reverse {commit_range}').stdout.strip().splitlines()
+    if not revs:
+        info("Nothing to do.")
+        return 0
+
+    with temporary_worktree(revs[0], root) as piledir:
+        # we have to checkout something in the directory we are going to
+        # genbranch in order to please git-worktree. However this is just a
+        # place to dump intermediate state that we are continuously resetting.
+        # BASELINE from the first rev is a good guesstimate, but it may not
+        # exist. In that case, just checkout anything, we are going to reset
+        # to a new commit as the first thing anyway
+        commit = get_baseline(piledir) or revs[0]
+        with temporary_worktree(commit, root) as resultdir:
+            last_good_rev = None
+            tree = "tree " + git(f"log --format=%T -1 {parent_rev}").stdout.strip() if parent_rev else None
+
+            # avoid exit() from genbranch - we want to recover and continue
+            set_fatal_behavior("raise")
+            genbranch_args = parse_args(["genbranch", "-i", "-q"])
+
+            total_revs = len(revs)
+
+            for idx, rev in enumerate(revs):
+                git(f'-C {piledir} reset --hard {rev}')
+                info(f'Generating branch for {rev} ({idx + 1}/{total_revs}) ', end='')
+                sys.stdout.flush()
+                ts0 = timeit.default_timer()
+
+                try:
+                    with redirect_stdout(nul_f), redirect_stderr(nul_f), pushdir(resultdir, root):
+                        _genbranch(root, piledir, config, genbranch_args)
+
+                        tree = next((x for x in git("cat-file commit HEAD").stdout.strip().splitlines() if x.startswith("tree")), None)
+                        last_good_rev = rev
+                except KeyboardInterrupt:
+                    raise
+                except:
+                    # try to cleanup to recover checkout
+                    git_can_fail(f"-C {resultdir} am --abort", stderr=nul_f, stdout=nul_f)
+                    git_can_fail(f"-C {resultdir} cleant  -fxd", stderr=nul_f, stdout=nul_f)
+
+                    print(f"[ {timeit.default_timer() - ts0:.2f}s ]")
+
+                    if not parent_rev:
+                        # EMPTY_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+                        # git("hash-object -t tree -w --stdin", stdin=nul_f).stdout.strip()
+                        tree = "tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+                    else:
+                        error(f"could not genbranch from {rev}.\nPrevious rev will be used and empty commit generated")
+                else:
+                    print(f"[ {timeit.default_timer() - ts0:.2f}s ]")
+
+                # Input to create new commit:
+                # tree comes from the result of genbranch
+                # parent comes from the previous result of genbranch, cached in parent_rev
+                # author, committer and commit message comes from the pile commit
+                if not tree:
+                    fatal(f"Unknown tree hash for commit {rev}")
+
+                commit_input = [tree]
+                if parent_rev:
+                    commit_input += [f"parent {parent_rev}"]
+
+                out = git(f"cat-file commit {rev}").stdout.strip().split('\n')
+                for idx, l in enumerate(out):
+                    if not l:
+                        break
+                    if l.startswith("tree") or l.startswith("parent"):
+                        continue
+                    commit_input += [l]
+                commit_input += out[idx:]
+
+                proc = subprocess.Popen(["git", "hash-object", "-t", "commit", "-w", "--stdin" ],
+                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True)
+                out, _ = proc.communicate("\n".join(commit_input))
+                if proc.returncode or not out:
+                    fatal(f"Couldn't create commit object for {rev} - {commit_input}")
+
+                parent_rev = out.strip()
+
+                # update notes
+                notes = f"pile-commit: {rev}"
+                if rev != last_good_rev and last_good_rev:
+                    notes += f"\npile-commit-reused: {last_good_rev}"
+                git(["notes", f"--ref={notes_ref}", "add", "-f", "-m", notes, parent_rev])
+
+                if parent_rev:
+                    git(f"update-ref refs/heads/{branch} {parent_rev}")
+
+    print("Done.")
 
     return 0
 
@@ -1774,6 +1917,23 @@ shortcut. From more verbose to the easiest ones:
         dest="fuzzy",
         default=None)
     parser_am.set_defaults(func=cmd_am)
+
+    # genlinear-branch
+    parser_genlinear_branch = subparsers.add_parser('genlinear-branch', help="Generate linear branch from genbranch on each pile revision")
+    parser_genlinear_branch.add_argument(
+        "-b", "--branch",
+        help="Use BRANCH to store the linear result branch [Default: pile.linear-branch from config]",
+        metavar="BRANCH",
+        default="")
+    parser_genlinear_branch.add_argument(
+        "-r", "--recreate", "--no-incremental",
+        help="Do not reuse branch to skip revisions that were already previously "
+             "executed through genlinear-branch. Instead, work in non-incremental "
+             "mode, recreating the branch from scratch",
+        action="store_false",
+        dest="incremental",
+        default=True)
+    parser_genlinear_branch.set_defaults(func=cmd_genlinear_branch)
 
     # baseline
     parser_baseline = subparsers.add_parser('baseline', help="Return the baseline commit hash")
