@@ -751,7 +751,7 @@ From: {user} <{email}>
 Date: {date}
 Subject: [{prefix} {n_patches}/{n_patches}] REVIEW: Full tree diff against {oldref}
 MIME-Version: 1.0
-Content-Type: text/x-diff; charset=UTF-8
+Content-Type: text/x-patch; charset=UTF-8
 Content-Transfer-Encoding: 8bit{add_header}
 
 Auto-generated diff between {oldref}..{newref}
