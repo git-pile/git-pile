@@ -1857,7 +1857,13 @@ series  config  X'.patch  Y'.patch  Z'.patch
         default=False)
     parser_format_patch.add_argument(
         "--allow-local-pile-commits", "--local",
-        help="Bypass check for local pile commits to allow partial patch series",
+        help="Bypass check for local pile commits to allow partial patch series. By default "
+             "git-pile checks the pile branch is in sync with the remote to avoid a situation "
+             "where the patch series can't be applied by another person due to missing dependencies. "
+             "That is a common scenario when preparing a v2 of a patch series and having the v1 "
+             "temporarily applied.  However you may to avoid this check if this is what you really "
+             "intend, preparing another patch series on top. In this case beware you will need to use "
+             "the additional REFS parameter, pointing git-pile to both the old and new states of RESULT_BRANCH",
         action="store_true",
         default=False)
     parser_format_patch.add_argument(
