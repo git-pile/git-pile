@@ -88,7 +88,7 @@ class Config:
                     value = self._value_to_bool(value)
 
                 setattr(self, key, value)
-            except e:
+            except:
                 warn(f"could not set {key}={value} from git config")
 
     def _value_to_bool(self, value):
@@ -564,7 +564,7 @@ def parse_commit_range(commit_range, pile_dir, default_end):
     if not commit_range:
         baseline = get_baseline(pile_dir)
         if not baseline:
-            fatal("no BASELINE configured in %s" % config.dir)
+            fatal("no BASELINE configured in %s" % pile_dir)
         return baseline, default_end
 
     range = commit_range.split("..")
