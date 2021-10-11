@@ -1,2 +1,2 @@
 # round to the next integer when releasing
-__version__ = '0.98-dev'
+__version__ = '0.98'
