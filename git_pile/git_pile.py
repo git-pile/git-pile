@@ -88,7 +88,7 @@ class Config:
                     value = self._value_to_bool(value)
 
                 setattr(self, key, value)
-            except e:
+            except:
                 warn(f"could not set {key}={value} from git config")
 
     def _value_to_bool(self, value):
