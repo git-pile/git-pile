@@ -1609,36 +1609,42 @@ def cmd_reset(args):
     if not remote_pile:
         fatal("Branch %s doesn't have an upstream" % config.pile_branch)
 
-    if args.inplace:
-        branch_dir = os.getcwd()
-        if branch_dir == pile_dir:
-            fatal("In-place reset can't reset both %s and %s branches to the same commit\n"
-                  "You are probably in the wrong directory for in-place reset."
-                  % (config.pile_branch, config.result_branch))
+    if not args.pile_only:
+        if args.inplace:
+            branch_dir = os.getcwd()
+            if branch_dir == pile_dir:
+                fatal("In-place reset can't reset both %s and %s branches to the same commit\n"
+                      "You are probably in the wrong directory for in-place reset."
+                      % (config.pile_branch, config.result_branch))
 
-        local_branch = git("rev-parse --abbrev-ref HEAD").stdout.strip()
-        if local_branch == "HEAD":
-            local_branch = git("rev-parse --short HEAD").stdout.strip() + " (detached)"
-    else:
-        branch_dir = git_worktree_get_checkout_path(gitroot, config.result_branch)
-        if not branch_dir:
-            fatal("Could not find checkout of %s branch, refusing to reset.\nYou should probably inspect '%s'"
-                  % (config.result_branch, gitroot))
-        local_branch = config.result_branch
+            local_branch = git("rev-parse --abbrev-ref HEAD").stdout.strip()
+            if local_branch == "HEAD":
+                local_branch = git("rev-parse --short HEAD").stdout.strip() + " (detached)"
+        else:
+            branch_dir = git_worktree_get_checkout_path(gitroot, config.result_branch)
+            if not branch_dir:
+                fatal("Could not find checkout of %s branch, refusing to reset.\nYou should probably inspect '%s'"
+                      % (config.result_branch, gitroot))
+            local_branch = config.result_branch
 
-    remote_branch = git_can_fail("rev-parse --abbrev-ref %s@{u}" % config.result_branch).stdout.strip()
-    if not remote_branch:
-        fatal("Branch %s doesn't have an upstream" % config.result_branch)
+        remote_branch = git_can_fail("rev-parse --abbrev-ref %s@{u}" % config.result_branch).stdout.strip()
+        if not remote_branch:
+            fatal("Branch %s doesn't have an upstream" % config.result_branch)
 
     git(["-C", pile_dir, "reset", "--hard", remote_pile])
     print("{local_branch:<20}-> {remote_branch:<20} {dir}".format(
           local_branch=config.pile_branch, remote_branch=remote_pile, dir=pile_dir))
 
-    git(["-C", branch_dir, "reset", "--hard", remote_branch])
-    print("{local_branch:<20}-> {remote_branch:<20} {dir}".format(
-          local_branch=local_branch, remote_branch=remote_branch, dir=branch_dir))
+    if not args.pile_only:
+        git(["-C", branch_dir, "reset", "--hard", remote_branch])
+        print("{local_branch:<20}-> {remote_branch:<20} {dir}".format(
+              local_branch=local_branch, remote_branch=remote_branch, dir=branch_dir))
+        print("Branches synchronized with their current remotes")
+    else:
+        print("\nHEAD is now at",  git(f"-C {pile_dir} log --oneline --abbrev-commit --no-decorate -1 HEAD").stdout.strip())
+        print("ORIG_HEAD is  ",  git(f"-C {pile_dir} log --oneline --abbrev-commit --no-decorate -1 ORIG_HEAD").stdout.strip())
+        print("\nPile synchronized with current remote.")
 
-    print("Branches synchronized with their current remotes")
 
 
 def parse_args(cmd_args):
@@ -1984,6 +1990,11 @@ shortcut. From more verbose to the easiest ones:
 
     # reset
     parser_reset = subparsers.add_parser('reset', help="Reset RESULT_BRANCH and PILE_BRANCH to match remote")
+    parser_reset.add_argument(
+        "-p", "--pile-only",
+        help="Reset only the pile branch, keep result branch intact",
+        action="store_true",
+        default=False)
     parser_reset.add_argument(
         "-i", "--inplace", "--in-place",
         help="Reset branch in-place: the current branch in the CWD is reset to the upstream of RESULT_BRANCH",
