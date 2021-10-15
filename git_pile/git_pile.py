@@ -579,7 +579,7 @@ def parse_commit_range(commit_range, pile_dir, default_end):
     try:
         git("rev-parse %s" % base, stderr=nul_f, stdout=nul_f)
         git("rev-parse %s" % result, stderr=nul_f, stdout=nul_f)
-    except (ValueError, subprocess.CalledProcessError) as e:
+    except (ValueError, subprocess.CalledProcessError):
         fatal("Invalid commit range: %s" % commit_range)
 
     return base, result
@@ -891,9 +891,6 @@ class PileCover:
         f.write("From %s\n" % from_str)
 
         for k, v in zip(self.m.keys(), self.m.values()):
-            if k.lower() == "subject":
-                has_subject = True
-
             if k.lower() == "subject" or k.lower() == "from":
                 vfinal = ""
                 for v, vencoding in email.header.decode_header(v):
