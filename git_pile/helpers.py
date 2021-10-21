@@ -9,6 +9,7 @@ import sys
 from contextlib import contextmanager
 
 debug_run = False
+log_color = True
 fatal_behavior = "exit"
 
 def set_debugging(val):
@@ -19,6 +20,11 @@ def set_debugging(val):
 def set_fatal_behavior(s):
     global fatal_behavior
     fatal_behavior = s
+
+
+def log_enable_color(b):
+    global log_color
+    log_color = b
 
 
 # Like open(), but reserves file == "-", file == "" or file == None for stdin
@@ -101,7 +107,7 @@ class subcmd:
 
 
 def info(s, *args, **kwargs):
-    color = kwargs.pop("color", True)
+    color = kwargs.pop("color", log_color)
     if color:
         sl = ["‣\033[0;1;39m", s, *args, "\033[0m"]
     else:
