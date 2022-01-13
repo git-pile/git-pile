@@ -146,21 +146,12 @@ def git_init(branch, directory):
     git(f"-C {directory} checkout -b {branch}")
 
 
-# Return the toplevel directory of the outermost git root, i.e. even if you are in a worktree
-# checkout it will return the "main" directory. E.g:
-#
-# $ git worktree list
-# /tmp/git-pile-playground          9f6f8b4 [internal]
-# /tmp/git-pile-playground/patches  f7672c2 [pile]
-#
-# If CWD is any of those directories, git_root() will return the topmost:
-# /tmp/git-pile-playground
-#
-# It works when we have a .git dir inside a work tree, but not in the rare cases of
-# having a gitdir detached from the worktree
+# Return the git root of current worktree or abort when not in a worktree
 def git_root():
-    commondir = git("rev-parse --git-common-dir").stdout.strip("\n")
-    return git("-C %s rev-parse --show-toplevel" % op.join(commondir, "..")).stdout.strip("\n")
+    try:
+        return git("rev-parse --show-toplevel").stdout.strip("\n")
+    except subprocess.CalledProcessError:
+        sys.exit(1)
 
 
 # Return the path a certain branch is checked out at
