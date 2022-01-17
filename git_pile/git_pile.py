@@ -146,21 +146,12 @@ def git_init(branch, directory):
     git(f"-C {directory} checkout -b {branch}")
 
 
-# Return the toplevel directory of the outermost git root, i.e. even if you are in a worktree
-# checkout it will return the "main" directory. E.g:
-#
-# $ git worktree list
-# /tmp/git-pile-playground          9f6f8b4 [internal]
-# /tmp/git-pile-playground/patches  f7672c2 [pile]
-#
-# If CWD is any of those directories, git_root() will return the topmost:
-# /tmp/git-pile-playground
-#
-# It works when we have a .git dir inside a work tree, but not in the rare cases of
-# having a gitdir detached from the worktree
-def git_root():
-    commondir = git("rev-parse --git-common-dir").stdout.strip("\n")
-    return git("-C %s rev-parse --show-toplevel" % op.join(commondir, "..")).stdout.strip("\n")
+# Return the git root of current worktree or abort when not in a worktree
+def git_root_or_die():
+    try:
+        return git("rev-parse --show-toplevel").stdout.strip("\n")
+    except subprocess.CalledProcessError:
+        sys.exit(1)
 
 
 # Return the path a certain branch is checked out at
@@ -332,7 +323,7 @@ def cmd_init(args):
     except subprocess.CalledProcessError:
         fatal("invalid baseline commit %s" % args.baseline)
 
-    path = git_worktree_get_checkout_path(git_root(), args.pile_branch)
+    path = git_worktree_get_checkout_path(git_root_or_die(), args.pile_branch)
     if path:
         fatal("branch '%s' is already checked out at '%s'" % (args.pile_branch, path))
 
@@ -405,8 +396,8 @@ def cmd_setup(args):
     else:
         fatal("Branch '%s' does not exist neither as local or remote branch" % args.pile_branch)
 
-    # optional arg: use current branch that is checked out in git_root()
-    gitroot = git_root()
+    # optional arg: use current branch that is checked out in git_root_or_die()
+    gitroot = git_root_or_die()
     try:
         result_branch = args.result_branch if args.result_branch else git('-C %s symbolic-ref --short -q HEAD' % gitroot).stdout.strip()
     except subprocess.CalledProcessError:
@@ -772,7 +763,7 @@ def cmd_genpatches(args):
     if not config.check_is_valid():
         return 1
 
-    root = git_root()
+    root = git_root_or_die()
     patchesdir = op.join(root, config.dir)
     base, result = parse_commit_range(args.commit_range, patchesdir,
                                       config.result_branch)
@@ -980,7 +971,7 @@ def cmd_am(args):
     if not config.check_is_valid():
         return 1
 
-    root = git_root()
+    root = git_root_or_die()
     patchesdir = op.join(root, config.dir)
 
     cover = PileCover.parse(args.mbox_cover)
@@ -1176,7 +1167,7 @@ def cmd_format_patch(args):
     if not config.check_is_valid():
         return 1
 
-    root = git_root()
+    root = git_root_or_die()
     patchesdir = op.join(root, config.dir)
 
     oldbaseline, newbaseline, oldref, newref = _parse_format_refs(args.refs, get_baseline(patchesdir))
@@ -1405,7 +1396,7 @@ pile patches.""")
 
 def cmd_genbranch(args):
     config = Config()
-    root = git_root()
+    root = git_root_or_die()
     patchesdir = op.join(root, config.dir)
 
     return _genbranch(root, patchesdir, config, args)
@@ -1441,7 +1432,7 @@ def cmd_genlinear_branch(args):
     if not config.check_is_valid():
         return 1
 
-    root = git_root()
+    root = git_root_or_die()
     branch = config.linear_branch or args.branch
     if not branch:
         fatal("Branch not specified in command-line and not configured: use -b argument or configure in pile.linear-branch")
@@ -1549,7 +1540,7 @@ def cmd_baseline(args):
     if not config.check_is_valid():
         return 1
 
-    root = git_root()
+    root = git_root_or_die()
     patchesdir = op.join(root, config.dir)
     b_dir = get_baseline(patchesdir)
     b_branch = get_baseline_from_branch(config.pile_branch)
@@ -1569,7 +1560,7 @@ def cmd_destroy(args):
     config = Config()
 
     # everything here is relative to root
-    os.chdir(git_root())
+    os.chdir(git_root_or_die())
 
     # implode - we have the cached values saved in config
     if git("config --remove-section pile", check=False, stderr=nul_f).returncode != 0:
@@ -1594,7 +1585,7 @@ def cmd_reset(args):
         return 1
 
     # everything here is relative to root
-    gitroot = git_root()
+    gitroot = git_root_or_die()
 
     # ensure we have it checked-out
     pile_dir = git_worktree_get_checkout_path(gitroot, config.pile_branch)
