@@ -988,7 +988,7 @@ def cmd_am(args):
             print("Could not checkout commit %s\n as baseline - you probably need to git-fetch it." % cover.pile_commit,
                   file=sys.stderr)
 
-    with subprocess.Popen(["git", "-C", patchesdir, "am", "-3"],
+    with subprocess.Popen(["git", "-C", patchesdir, "am", "-3", "--whitespace=nowarn"],
             stdin=subprocess.PIPE, universal_newlines=True) as proc:
         cover.dump(proc.stdin)
 
@@ -1321,7 +1321,7 @@ def _genbranch(root, patchesdir, config, args):
     stderr = sys.stderr
 
     if not args.dirty:
-        apply_cmd = ["-c", "core.splitIndex=true", "am", "--no-3way"]
+        apply_cmd = ["-c", "core.splitIndex=true", "am", "--no-3way", "--whitespace=warn"]
         if config.genbranch_committer_date_is_author_date:
             apply_cmd.append("--committer-date-is-author-date")
         if args.fix_whitespace:
