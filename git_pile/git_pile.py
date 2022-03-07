@@ -902,6 +902,19 @@ class PileCover:
         f.write(self.m.get_payload(decode=False))
 
 
+def should_try_fuzzy(args, msg):
+    if args.fuzzy is None:
+        if sys.stdin.isatty():
+            fuzzy = prompt_yesno(msg, default=True)
+        else:
+            fuzzy = False
+
+        # cache reply for next times
+        args.fuzzy = fuzzy
+
+    return args.fuzzy
+
+
 def git_am_solve_diff_hunk_conflicts(args, patchesdir):
     status = git(f"-C {patchesdir} status --porcelain").stdout.splitlines()
     resolved = True
@@ -917,16 +930,7 @@ def git_am_solve_diff_hunk_conflicts(args, patchesdir):
     if not any_unmerged:
         return False
 
-    # Now check if we should actually try to fix the conflict
-    if args.fuzzy is None:
-        if sys.stdin.isatty():
-            fuzzy = prompt_yesno("git am failed. Auto-solve trivial conflicts?", default=True)
-        else:
-            fuzzy = False
-    else:
-        fuzzy = args.fuzzy
-
-    if not fuzzy:
+    if not should_try_fuzzy(args, "git am failed. Auto-solve trivial conflicts?"):
         return False
 
     warn("\n\n--------------------------- git-pile")
