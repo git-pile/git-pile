@@ -13,6 +13,7 @@ import sys
 import tempfile
 import timeit
 
+from pathlib import Path
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from time import strftime
 
@@ -1305,6 +1306,21 @@ option to this command.""")
     return 0
 
 
+def git_am_apply_fallbacks(apply_cmd, args, stdout, stderr, env):
+    # we can only use fallbacks when applying patches with git-am
+    if "am" not in apply_cmd:
+        return False
+
+    if not should_try_fuzzy(args, "genbranch failed. Auto-solve trivial conflicts?"):
+        return False
+
+    cur_patch = Path(git_worktree_get_git_dir()) / "rebase-apply" / "patch"
+    ret = git_can_fail(f'apply --index --reject --recount {cur_patch}',
+                       stdout=stdout, stderr=stderr, env=env, start_new_session=True)
+
+    return ret.returncode == 0
+
+
 def _genbranch(root, patchesdir, config, args):
     if not config.check_is_valid():
         return 1
@@ -1359,15 +1375,37 @@ def _genbranch(root, patchesdir, config, args):
         else:
             git("checkout -B %s %s" % (args.branch, baseline))
 
+        any_fallback = False
+
         if patchlist:
             with git_split_index():
                 ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, stderr=stderr, env=env, start_new_session=True)
+                while ret.returncode != 0:
+                    if not git_am_apply_fallbacks(apply_cmd, args, stdout, stderr, env):
+                        break
+
+                    any_fallback = True
+
+                    # check for progress, if am --continue fails without progressing a single patch
+                    # then we bailout
+                    next_patch = Path(git_worktree_get_git_dir()) / "rebase-apply" / "next"
+                    out0 = next_patch.read_text()
+                    ret = git_can_fail('am --continue', stdout=stdout, stderr=stderr, env=env, start_new_session=True)
+                    if ret.returncode != 0:
+                        out1 = next_patch.read_text()
+                        if out1 == out0:
+                            break
 
             if ret.returncode != 0:
                 fatal("""Conflict encountered while applying pile patches.
 
 Please resolve the conflict, then run "git am --continue" to continue applying
 pile patches.""")
+
+        if any_fallback:
+            warn("Branch created successfully, but with the use of fallbacks\n"
+                 "The result branch doesn't correspond to the current state\n"
+                 "of the pile. Pile needs to be updated to match result branch")
 
         return 0
 
@@ -1820,6 +1858,17 @@ series  config  X'.patch  Y'.patch  Z'.patch
         "--fix-whitespace",
         help="Pass --whitespace=fix to git am to fix whitespace",
         action="store_true")
+    parser_genbranch.add_argument(
+        "--fuzzy",
+        help="Allow to fallback to patch application with conflict solving. "
+             "When using this option, git-pile will try to fallback to alternative "
+             "patch application methods to avoid conflicts that can be solved by "
+             "tools other than git-am. The final branch will not correspond to the "
+             "pile and will need to be regenerated",
+        action="store_true",
+        dest="fuzzy",
+        default=None)
+
     parser_genbranch.set_defaults(func=cmd_genbranch)
     parser_genbranch.add_argument(
         "--dirty",
