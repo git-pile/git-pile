@@ -1191,6 +1191,9 @@ option to this command.""")
 
     c_commits, a_commits, d_commits, diff_filter_list = _parse_range_diff(range_diff_commits)
 
+    if args.no_range_diff_filter:
+        diff_filter_list = []
+
     # get a simple diff of all the changes to attach to the coverletter filtered by the
     # output of git-range-diff
     with temporary_worktree(config.pile_branch, root) as tmpdir:
@@ -1847,6 +1850,18 @@ series  config  X'.patch  Y'.patch  Z'.patch
     parser_format_patch.add_argument(
         "--no-full-patch",
         help="Do not generate patch with full diff\n",
+        action="store_true",
+        default=False)
+    parser_format_patch.add_argument(
+        '--no-range-diff-filter', '--like-genpatches',
+        help="Do not filter out patches that have changes on diff hunk numbers only. "
+             "To reduce the diff and possible conflicts with other patch series, git-pile "
+             "by default filters out changes to patches that only change the line numbers "
+             "as recorded in the diff hunk headers. For some rare cases in which a patch to "
+             "a file removes a large number of lines, and another patch on top changes "
+             "lines nearby, this may fail. Passing this option allows git-pile to output the "
+             "full diff in the cover letter, as if git-pile genpatches had been called.",
+        dest="no_range_diff_filter",
         action="store_true",
         default=False)
     parser_format_patch.add_argument(
