@@ -13,6 +13,7 @@ import sys
 import tempfile
 import timeit
 
+from pathlib import Path
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from time import strftime
 
@@ -902,6 +903,19 @@ class PileCover:
         f.write(self.m.get_payload(decode=False))
 
 
+def should_try_fuzzy(args, msg):
+    if args.fuzzy is None:
+        if sys.stdin.isatty():
+            fuzzy = prompt_yesno(msg, default=True)
+        else:
+            fuzzy = False
+
+        # cache reply for next times
+        args.fuzzy = fuzzy
+
+    return args.fuzzy
+
+
 def git_am_solve_diff_hunk_conflicts(args, patchesdir):
     status = git(f"-C {patchesdir} status --porcelain").stdout.splitlines()
     resolved = True
@@ -917,16 +931,7 @@ def git_am_solve_diff_hunk_conflicts(args, patchesdir):
     if not any_unmerged:
         return False
 
-    # Now check if we should actually try to fix the conflict
-    if args.fuzzy is None:
-        if sys.stdin.isatty():
-            fuzzy = prompt_yesno("git am failed. Auto-solve trivial conflicts?", default=True)
-        else:
-            fuzzy = False
-    else:
-        fuzzy = args.fuzzy
-
-    if not fuzzy:
+    if not should_try_fuzzy(args, "git am failed. Auto-solve trivial conflicts?"):
         return False
 
     warn("\n\n--------------------------- git-pile")
@@ -1301,6 +1306,54 @@ option to this command.""")
     return 0
 
 
+def fallback_apply_reset():
+    git('reset --hard HEAD')
+    status = git(f'status --porcelain').stdout.splitlines()
+
+    # remove any untracked file left by git-apply or patch (*.rej, *.orig)
+    for l in status:
+        if l[0] == '?' and l[1] == '?' and (l.endswith('.rej') or l.endswith('.orig')):
+            f = Path(l.split()[1])
+            f.unlink(missing_ok=True)
+
+
+def git_am_apply_fallbacks(apply_cmd, args, stdout, stderr, env):
+    # we can only use fallbacks when applying patches with git-am
+    if "am" not in apply_cmd:
+        return False
+
+    if not should_try_fuzzy(args, "genbranch failed. Auto-solve trivial conflicts?"):
+        return False
+
+    cur_patch = Path(git_worktree_get_git_dir()) / "rebase-apply" / "patch"
+
+    fallback_apply_reset()
+    ret = git_can_fail(f'apply --index --reject --recount {cur_patch}',
+                       stdout=stdout, stderr=stderr, env=env, start_new_session=True)
+    if ret.returncode != 0:
+        fallback_apply_reset()
+
+        # record previously untracked files so we don't add them later
+        untracked_files = []
+        for l in git(f'status --porcelain').stdout.splitlines():
+            if l[0] == '?' and l[1] == '?':
+                f = Path(l.split()[1])
+                untracked_files += []
+
+        patch_can_fail = run_wrapper('patch', capture=True, check=False)
+        ret = patch_can_fail(f'-p1 -i {cur_patch}',
+                             stdout=stdout, stderr=stderr, env=env, start_new_session=True)
+        if ret.returncode == 0:
+            for l in git(f'status --porcelain').stdout.splitlines():
+                f = Path(l.split()[1])
+                if l[0] == '?' and l[1] == '?' and not f in untracked_files:
+                    git(f'add {f}')
+                else:
+                    git(f'add {f}')
+
+    return ret.returncode == 0
+
+
 def _genbranch(root, patchesdir, config, args):
     if not config.check_is_valid():
         return 1
@@ -1355,15 +1408,37 @@ def _genbranch(root, patchesdir, config, args):
         else:
             git("checkout -B %s %s" % (args.branch, baseline))
 
+        any_fallback = False
+
         if patchlist:
             with git_split_index():
                 ret = git_can_fail(apply_cmd + patchlist, stdout=stdout, stderr=stderr, env=env, start_new_session=True)
+                while ret.returncode != 0:
+                    if not git_am_apply_fallbacks(apply_cmd, args, stdout, stderr, env):
+                        break
+
+                    any_fallback = True
+
+                    # check for progress, if am --continue fails without progressing a single patch
+                    # then we bailout
+                    next_patch = Path(git_worktree_get_git_dir()) / "rebase-apply" / "next"
+                    out0 = next_patch.read_text()
+                    ret = git_can_fail('am --continue', stdout=stdout, stderr=stderr, env=env, start_new_session=True)
+                    if ret.returncode != 0:
+                        out1 = next_patch.read_text()
+                        if out1 == out0:
+                            break
 
             if ret.returncode != 0:
                 fatal("""Conflict encountered while applying pile patches.
 
 Please resolve the conflict, then run "git am --continue" to continue applying
 pile patches.""")
+
+        if any_fallback:
+            warn("Branch created successfully, but with the use of fallbacks\n"
+                 "The result branch doesn't correspond to the current state\n"
+                 "of the pile. Pile needs to be updated to match result branch")
 
         return 0
 
@@ -1816,6 +1891,17 @@ series  config  X'.patch  Y'.patch  Z'.patch
         "--fix-whitespace",
         help="Pass --whitespace=fix to git am to fix whitespace",
         action="store_true")
+    parser_genbranch.add_argument(
+        "--fuzzy",
+        help="Allow to fallback to patch application with conflict solving. "
+             "When using this option, git-pile will try to fallback to alternative "
+             "patch application methods to avoid conflicts that can be solved by "
+             "tools other than git-am. The final branch will not correspond to the "
+             "pile and will need to be regenerated",
+        action="store_true",
+        dest="fuzzy",
+        default=None)
+
     parser_genbranch.set_defaults(func=cmd_genbranch)
     parser_genbranch.add_argument(
         "--dirty",
