@@ -984,9 +984,9 @@ def cmd_am(args):
         return 1
 
     info("Entering '%s' directory" % config.dir)
-    gitdir = git_worktree_get_git_dir()
+    gitdir = git_worktree_get_git_dir(patchesdir)
     if op.isdir(op.join(gitdir, "rebase-apply")):
-        fatal("Already on an am or rebase operation", file=sys.stderr)
+        fatal(f"Already on am or rebase operation in worktree {patchesdir}", file=sys.stderr)
 
     if args.strategy == "pile-commit":
         if git(["-C", patchesdir, "reset", "--hard", cover.pile_commit], check=False).returncode != 0:
