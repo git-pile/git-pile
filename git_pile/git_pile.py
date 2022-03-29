@@ -38,6 +38,17 @@ nul_f = open(os.devnull, 'w')
 def log10_or_zero(n):
     return math.log10(n) if n else 0
 
+
+# Mimic git bevavior to find the editor. We need to do this since
+# GIT_EDITOR was overriden
+def get_git_editor():
+    return os.environ.get('GIT_EDITOR', None) or \
+        git(['config', 'core.editor'], check=False).stdout.strip() or \
+        os.environ.get('VISUAL', None) or \
+        os.environ.get('EDITOR', None) or \
+        'vi'
+
+
 def assert_required_tools():
     error_msg_git = "git >= 2.19 is needed, please check requirements"
 
@@ -66,6 +77,7 @@ class Config:
         self.pile_branch = ""
         self.format_add_header = ""
         self.format_output_directory = ""
+        self.format_compose = False
         self.linear_branch = ""
         self.genbranch_committer_date_is_author_date = True
         self.genbranch_user_name = None
@@ -1253,7 +1265,8 @@ option to this command.""")
                      git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
                      prefix, range_diff_commits, config.format_add_header,
                      cover_subject, cover_body)
-    print(op.join(output, cover_fn))
+    cover_path = op.join(output, cover_fn)
+    print(cover_path)
 
     with tempfile.TemporaryDirectory() as d:
         for i, c in enumerate(a_commits):
@@ -1302,6 +1315,19 @@ option to this command.""")
                                 oldbaseline, newbaseline, oldref, newref,
                                 prefix, config.format_add_header)
             print(op.join(output, full_tree_patch_fn))
+
+    if args.compose is None:
+        compose = config.format_compose
+    else:
+        compose = args.compose
+
+    if compose:
+        editor = get_git_editor()
+        # according to git-var(1), the value is meant to be interpreted by the
+        # shell when it is used. Examples: ~/bin/vi, $SOME_ENVIRONMENT_VARIABLE,
+        # "C:\Program Files\Vim\gvim.exe" --nofork.
+        cmd = ['sh', '-c', f'{editor} "{cover_path}"']
+        os.execvp(cmd[0], cmd)
 
     return 0
 
@@ -1969,6 +1995,19 @@ series  config  X'.patch  Y'.patch  Z'.patch
         '--reroll-count', '-v',
         help="Mark the series as the <n>-th iteration of the topic. This mimics the same behavior from git-format-patch",
         action="store")
+
+    parser_format_patch.add_argument(
+        "--no-compose", "--no-edit",
+        action="store_false",
+        dest="compose",
+        default=None)
+    parser_format_patch.add_argument(
+        '--compose', '--edit',
+        help="Invoke a text editor (see GIT_EDITOR in git-var(1)) to edit the cover letter. Similar to --compose in git-send-email. Default: format-compose from config or false if not set",
+        action="store_true",
+        dest="compose",
+        default=None)
+
     parser_format_patch.add_argument(
         "refs",
         help="""
