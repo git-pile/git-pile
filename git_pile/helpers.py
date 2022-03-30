@@ -115,6 +115,7 @@ COLOR_RED = "\033[31m"
 COLOR_YELLOW = "\033[33m"
 COLOR_WHITE = "\033[0;1;39m"
 COLOR_RESET = "\033[0m"
+COLOR_NONE = ""
 
 
 def print_color(color, prefix, s, *args, **kwargs):
@@ -123,12 +124,12 @@ def print_color(color, prefix, s, *args, **kwargs):
 
 
 def info(s, *args, **kwargs):
-    color = COLOR_WHITE if kwargs.pop("color", log_color) else None
+    color = COLOR_WHITE if kwargs.pop("color", log_color) else COLOR_NONE
     print_color(color, "‣", s, *args, **kwargs)
 
 
 def fatal(s, *args, **kwargs):
-    color = COLOR_RED if kwargs.pop("color", log_color) else None
+    color = COLOR_RED if kwargs.pop("color", log_color) else COLOR_NONE
     kwargs.setdefault("file", sys.stderr)
     print_color(color, "fatal:", s, *args, **kwargs)
     if fatal_behavior == "exit":
@@ -137,13 +138,13 @@ def fatal(s, *args, **kwargs):
 
 
 def error(s, *args, **kwargs):
-    color = COLOR_RED if kwargs.pop("color", log_color) else None
+    color = COLOR_RED if kwargs.pop("color", log_color) else COLOR_NONE
     kwargs.setdefault("file", sys.stderr)
     print_color(color, "error:", s, *args, **kwargs)
 
 
 def warn(s, *args, **kwargs):
-    color = COLOR_YELLOW if kwargs.pop("color", log_color) else None
+    color = COLOR_YELLOW if kwargs.pop("color", log_color) else COLOR_NONE
     kwargs.setdefault("file", sys.stderr)
     print_color(color, "warning:", s, *args, **kwargs)
 
