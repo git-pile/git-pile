@@ -2147,7 +2147,7 @@ shortcut. From more verbose to the easiest ones:
 
 
 def main(*cmd_args):
-    log_enable_color(sys.stdout.isatty())
+    log_enable_color(sys.stdout.isatty(), sys.stderr.isatty())
 
     args = parse_args(cmd_args)
     if not args:

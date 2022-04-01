@@ -7,10 +7,13 @@ import subprocess
 import sys
 
 from contextlib import contextmanager
+from enum import Enum
+
 
 debug_run = False
-log_color = True
+log_color = (False, True, True)
 fatal_behavior = "exit"
+
 
 def set_debugging(val):
     global debug_run
@@ -22,9 +25,9 @@ def set_fatal_behavior(s):
     fatal_behavior = s
 
 
-def log_enable_color(b):
+def log_enable_color(stdout, stderr):
     global log_color
-    log_color = b
+    log_color = (False, stdout, stderr)
 
 
 # Like open(), but reserves file == "-", file == "" or file == None for stdin
@@ -111,6 +114,9 @@ class FatalException(Exception):
     pass
 
 
+STDOUT_FILENO = 1
+STDERR_FILENO = 2
+
 COLOR_RED = "\033[31m"
 COLOR_YELLOW = "\033[33m"
 COLOR_WHITE = "\033[0;1;39m"
@@ -124,12 +130,12 @@ def print_color(color, prefix, s, *args, **kwargs):
 
 
 def info(s, *args, **kwargs):
-    color = COLOR_WHITE if kwargs.pop("color", log_color) else COLOR_NONE
+    color = COLOR_WHITE if kwargs.pop("color", log_color[STDOUT_FILENO]) else COLOR_NONE
     print_color(color, "‣", s, *args, **kwargs)
 
 
 def fatal(s, *args, **kwargs):
-    color = COLOR_RED if kwargs.pop("color", log_color) else COLOR_NONE
+    color = COLOR_RED if kwargs.pop("color", log_color[STDERR_FILENO]) else COLOR_NONE
     kwargs.setdefault("file", sys.stderr)
     print_color(color, "fatal:", s, *args, **kwargs)
     if fatal_behavior == "exit":
@@ -138,13 +144,13 @@ def fatal(s, *args, **kwargs):
 
 
 def error(s, *args, **kwargs):
-    color = COLOR_RED if kwargs.pop("color", log_color) else COLOR_NONE
+    color = COLOR_RED if kwargs.pop("color", log_color[STDERR_FILENO]) else COLOR_NONE
     kwargs.setdefault("file", sys.stderr)
     print_color(color, "error:", s, *args, **kwargs)
 
 
 def warn(s, *args, **kwargs):
-    color = COLOR_YELLOW if kwargs.pop("color", log_color) else COLOR_NONE
+    color = COLOR_YELLOW if kwargs.pop("color", log_color[STDERR_FILENO]) else COLOR_NONE
     kwargs.setdefault("file", sys.stderr)
     print_color(color, "warning:", s, *args, **kwargs)
 
