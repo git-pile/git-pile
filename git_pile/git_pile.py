@@ -995,6 +995,11 @@ def cmd_am(args):
     if not cover:
         return 1
 
+    # We want to be able to prompt the user if running on a terminal.
+    # Check if stdout is tty to decide if we want to re-open stdin
+    if not sys.stdin.isatty() and sys.stdout.isatty():
+        sys.stdin = open('/dev/tty')
+
     info("Entering '%s' directory" % config.dir)
     gitdir = git_worktree_get_git_dir(patchesdir)
     if op.isdir(op.join(gitdir, "rebase-apply")):
