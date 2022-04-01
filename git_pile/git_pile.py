@@ -943,11 +943,11 @@ def git_am_solve_diff_hunk_conflicts(args, patchesdir):
     if not any_unmerged:
         return False
 
-    if not should_try_fuzzy(args, "git am failed. Auto-solve trivial conflicts?"):
+    warn("git-pile am failed")
+    if not should_try_fuzzy(args, "Auto-solve trivial conflicts?"):
         return False
 
-    warn("\n\n--------------------------- git-pile")
-    warn("git am failed, trying to fix conflicts automatically")
+    warn("Trying to fix conflicts automatically")
 
     sed = run_wrapper('sed', capture=True)
 
@@ -1021,7 +1021,7 @@ def cmd_am(args):
             proc.returncode = 0
 
     if proc.returncode != 0:
-        fatal("""git am failed, you will need to continue manually.
+        fatal("""git-pile am failed, you will need to continue manually.
 
 The '%s' directory is in branch '%s' in the middle of patching the series. You
 need to fix the conflicts, add the files and finalize with:
