@@ -943,11 +943,11 @@ def git_am_solve_diff_hunk_conflicts(args, patchesdir):
     if not any_unmerged:
         return False
 
-    if not should_try_fuzzy(args, "git am failed. Auto-solve trivial conflicts?"):
+    warn("git-pile am failed")
+    if not should_try_fuzzy(args, "Auto-solve trivial conflicts?"):
         return False
 
-    warn("\n\n--------------------------- git-pile")
-    warn("git am failed, trying to fix conflicts automatically")
+    warn("Trying to fix conflicts automatically")
 
     sed = run_wrapper('sed', capture=True)
 
@@ -995,6 +995,11 @@ def cmd_am(args):
     if not cover:
         return 1
 
+    # We want to be able to prompt the user if running on a terminal.
+    # Check if stdout is tty to decide if we want to re-open stdin
+    if not sys.stdin.isatty() and sys.stdout.isatty():
+        sys.stdin = open('/dev/tty')
+
     info("Entering '%s' directory" % config.dir)
     gitdir = git_worktree_get_git_dir(patchesdir)
     if op.isdir(op.join(gitdir, "rebase-apply")):
@@ -1016,7 +1021,7 @@ def cmd_am(args):
             proc.returncode = 0
 
     if proc.returncode != 0:
-        fatal("""git am failed, you will need to continue manually.
+        fatal("""git-pile am failed, you will need to continue manually.
 
 The '%s' directory is in branch '%s' in the middle of patching the series. You
 need to fix the conflicts, add the files and finalize with:
@@ -2142,7 +2147,7 @@ shortcut. From more verbose to the easiest ones:
 
 
 def main(*cmd_args):
-    log_enable_color(sys.stdout.isatty())
+    log_enable_color(sys.stdout.isatty(), sys.stderr.isatty())
 
     args = parse_args(cmd_args)
     if not args:
