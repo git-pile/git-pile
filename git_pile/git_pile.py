@@ -1098,13 +1098,15 @@ def _parse_format_refs(refs, current_baseline):
         r1 = refs[0].split("..")
         r2 = refs[1].split("..")
         if len(r1) == len(r2) and len(r1) == 2:
+            oldbaseline = None
+            oldref = None
             try:
                 oldbaseline = git(f"rev-parse {r1[0]}", stderr=nul_f).stdout.strip()
                 newbaseline = git(f"rev-parse {r2[0]}", stderr=nul_f).stdout.strip()
                 oldref = git(f"rev-parse {r1[1]}", stderr=nul_f).stdout.strip()
                 newref = git(f"rev-parse {r2[1]}", stderr=nul_f).stdout.strip()
             except subprocess.CalledProcessError:
-                if not oldbaseline or not newbaseline:
+                if not oldbaseline or not oldref:
                     fatal(f"{r1} does not point to a valid range")
                 fatal(f"{r2} does not point to a valid range")
         else:
