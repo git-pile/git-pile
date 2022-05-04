@@ -234,7 +234,10 @@ def _parse_baseline_line(iterable):
 
 
 def get_baseline_from_branch(branch):
-    out = git("show %s:config --" % branch).stdout
+    try:
+        out = git("show %s:config --" % branch).stdout
+    except subprocess.CalledProcessError:
+        fatal(f"'{branch}' doesn't look like a valid ref for pile branch: config file not found")
     return _parse_baseline_line(out.splitlines())
 
 
