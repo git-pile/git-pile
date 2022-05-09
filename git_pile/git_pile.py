@@ -234,7 +234,10 @@ def _parse_baseline_line(iterable):
 
 
 def get_baseline_from_branch(branch):
-    out = git("show %s:config --" % branch).stdout
+    try:
+        out = git("show %s:config --" % branch).stdout
+    except subprocess.CalledProcessError:
+        fatal(f"'{branch}' doesn't look like a valid ref for pile branch: config file not found")
     return _parse_baseline_line(out.splitlines())
 
 
@@ -1653,12 +1656,15 @@ def cmd_baseline(args):
 
     root = git_root_or_die()
     patchesdir = op.join(root, config.dir)
-    b_dir = get_baseline(patchesdir)
-    b_branch = get_baseline_from_branch(config.pile_branch)
+    if args.ref is None:
+        b_dir = get_baseline(patchesdir)
+        b_branch = get_baseline_from_branch(config.pile_branch)
 
-    if b_dir != b_branch:
-        fatal("Pile branch '%s' has baseline %s, but directory is currently at %s"
-              % (config.pile_branch, b_branch, b_dir))
+        if b_dir != b_branch:
+            fatal("Pile branch '%s' has baseline %s, but directory is currently at %s"
+                  % (config.pile_branch, b_branch, b_dir))
+    else:
+        b_branch = get_baseline_from_branch(args.ref)
 
     print(b_branch)
 
@@ -2117,6 +2123,11 @@ shortcut. From more verbose to the easiest ones:
 
     # baseline
     parser_baseline = subparsers.add_parser('baseline', help="Return the baseline commit hash")
+    parser_baseline.add_argument(
+        'ref',
+        help="pile commit to use to get the baseline",
+        nargs="?",
+        default=None)
     parser_baseline.set_defaults(func=cmd_baseline)
 
     # destroy
