@@ -25,6 +25,9 @@ else:
     mandir = '/usr/share/man'
     bash_completion_dir = '/etc/bash_completion.d'
 
+if 'BASH_COMPLETION_DIR' in os.environ:
+    bash_completion_dir = os.environ['BASH_COMPLETION_DIR']
+
 setup(
     name="git-pile",
     zip_safe = False,
