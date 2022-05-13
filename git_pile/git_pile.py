@@ -1943,14 +1943,13 @@ series  config  X'.patch  Y'.patch  Z'.patch
         action="store_true",
         dest="fuzzy",
         default=None)
-
-    parser_genbranch.set_defaults(func=cmd_genbranch)
     parser_genbranch.add_argument(
         "--dirty",
         help="Just apply the patches, do not create the corresponding commits",
         action="store_true",
         dest="dirty",
         default=False)
+    parser_genbranch.set_defaults(func=cmd_genbranch)
 
     # format-patch
     parser_format_patch = subparsers.add_parser('format-patch', help="Generate patches from BASELINE..HEAD and save patch series to output directory to be shared on a mailing list",
