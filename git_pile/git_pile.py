@@ -1397,7 +1397,7 @@ def _genbranch(root, patchesdir, config, args):
     if not config.check_is_valid():
         return 1
 
-    baseline = get_baseline(patchesdir)
+    baseline = args.baseline or get_baseline(patchesdir)
 
     # Make sure the baseline hasn't been pruned
     check_baseline_exists(baseline);
@@ -1949,6 +1949,10 @@ series  config  X'.patch  Y'.patch  Z'.patch
         action="store_true",
         dest="dirty",
         default=False)
+    parser_genbranch.add_argument(
+        "-x", "--baseline",
+        help="Ignoring baseline from pile, use whatever provided as argument",
+        default=None)
     parser_genbranch.set_defaults(func=cmd_genbranch)
 
     # format-patch
