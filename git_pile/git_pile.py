@@ -1313,9 +1313,9 @@ option to this command.""")
     os.makedirs(output or '.', exist_ok=True)
     rm_patches(output or '.')
 
-    total_patches = len(a_commits)
+    n_patches = len(a_commits)
     if not args.no_full_patch:
-        total_patches += 1
+        n_patches += 1
 
     if args.subject_prefix:
         subject_prefix = args.subject_prefix
@@ -1332,16 +1332,16 @@ option to this command.""")
         reroll_count_str = ""
 
     cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file, args.signoff)
-    cover_path = gen_cover_letter(diff, output, reroll_count_str, total_patches, newbaseline,
+    cover_path = gen_cover_letter(diff, output, reroll_count_str, n_patches, newbaseline,
             git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
             subject_prefix, range_diff_commits, config.format_add_header,
             cover_subject, cover_body)
 
-    gen_individual_patches(output, reroll_count_str, total_patches,
+    gen_individual_patches(output, reroll_count_str, n_patches,
             subject_prefix, config.format_add_header, a_commits)
 
     if not args.no_full_patch:
-        gen_full_tree_patch(output, reroll_count_str, total_patches,
+        gen_full_tree_patch(output, reroll_count_str, n_patches,
                             oldbaseline, newbaseline, oldref, newref,
                             subject_prefix, config.format_add_header)
 
