@@ -708,18 +708,23 @@ def get_cover_letter_message(commit_with_message, file_with_message, signoff):
     return subject, body
 
 
-def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, subject_prefix, range_diff_commits, add_header, subject, body):
+def gen_cover_letter(diff, output_dir, reroll_count_str, n_patches, baseline, pile_commit, subject_prefix, range_diff_commits, add_header, subject, body):
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
     now = strftime("%a, %d %b %Y %T %z")
+
+    cover_fn = "0000-cover-letter.patch"
+    if reroll_count_str:
+        cover_fn = f"{reroll_count_str}-{cover_fn}"
+    cover_path = op.join(output_dir, cover_fn)
 
     # 1:  34cf518f0aab ! 1:  3a4e12046539 <commit message>
     # Let only the lines with state == !, < or >
     reduced_range_diff = "\n".join(list(filter(lambda x: x and x.split(maxsplit=3)[2] in "!><", range_diff_commits)))
 
     zero_fill = int(log10_or_zero(n_patches)) + 1
-    with open(output, "w") as f:
+    with open(cover_path, "w") as f:
         f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
 Date: {date}
@@ -744,6 +749,10 @@ range-diff:
             f.write(l)
 
         f.write("--\ngit-pile {version}\n\n".format(version=__version__))
+
+    print(cover_path)
+
+    return cover_path
 
 
 def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, newref, subject_prefix, add_header):
@@ -1252,7 +1261,6 @@ option to this command.""")
     if not args.no_full_patch:
         total_patches += 1
 
-    cover_fn = "0000-cover-letter.patch"
     full_tree_patch_fn = f"{total_patches:04d}-full-tree-diff.patch"
 
     if args.subject_prefix:
@@ -1266,7 +1274,6 @@ option to this command.""")
     if args.reroll_count:
         reroll_count_str = f"v{args.reroll_count}"
         subject_prefix = f"{subject_prefix} {reroll_count_str}"
-        cover_fn = f"{reroll_count_str}-{cover_fn}"
         full_tree_patch_fn = f"{reroll_count_str}-{full_tree_patch_fn}"
     else:
         reroll_count_str = ""
@@ -1274,12 +1281,10 @@ option to this command.""")
     zero_fill = int(log10_or_zero(total_patches)) + 1
 
     cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file, args.signoff)
-    gen_cover_letter(diff, op.join(output, cover_fn), total_patches, newbaseline,
-                     git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
-                     subject_prefix, range_diff_commits, config.format_add_header,
-                     cover_subject, cover_body)
-    cover_path = op.join(output, cover_fn)
-    print(cover_path)
+    cover_path = gen_cover_letter(diff, output, reroll_count_str, total_patches, newbaseline,
+            git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
+            subject_prefix, range_diff_commits, config.format_add_header,
+            cover_subject, cover_body)
 
     with tempfile.TemporaryDirectory() as d:
         for i, c in enumerate(a_commits):
