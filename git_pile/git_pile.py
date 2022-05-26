@@ -708,7 +708,7 @@ def get_cover_letter_message(commit_with_message, file_with_message, signoff):
     return subject, body
 
 
-def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, prefix, range_diff_commits, add_header, subject, body):
+def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, subject_prefix, range_diff_commits, add_header, subject, body):
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
@@ -723,7 +723,7 @@ def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, prefix, ran
         f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
 Date: {date}
-Subject: [{prefix} {zeroes}/{n_patches}] {subject}
+Subject: [{subject_prefix} {zeroes}/{n_patches}] {subject}
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit{add_header}
@@ -736,7 +736,7 @@ range-diff:
 {range_diff}
 
 """.format(user=user, email=email, date=now, zeroes="0".zfill(zero_fill),
-           n_patches=n_patches, baseline=baseline, pile_commit=pile_commit, prefix=prefix,
+           n_patches=n_patches, baseline=baseline, pile_commit=pile_commit, subject_prefix=subject_prefix,
            range_diff=reduced_range_diff, add_header="\n" + add_header if add_header else "",
            subject=subject, body=body))
 
@@ -746,7 +746,7 @@ range-diff:
         f.write("--\ngit-pile {version}\n\n".format(version=__version__))
 
 
-def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, newref, prefix, add_header):
+def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, newref, subject_prefix, add_header):
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
@@ -756,7 +756,7 @@ def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, new
         f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
 Date: {date}
-Subject: [{prefix} {n_patches}/{n_patches}] REVIEW: Full tree diff against {oldref}
+Subject: [{subject_prefix} {n_patches}/{n_patches}] REVIEW: Full tree diff against {oldref}
 MIME-Version: 1.0
 Content-Type: text/x-patch; charset=UTF-8
 Content-Transfer-Encoding: 8bit{add_header}
@@ -764,7 +764,7 @@ Content-Transfer-Encoding: 8bit{add_header}
 Auto-generated diff between {oldref}..{newref}
 ---
 """.format(user=user, email=email, date=now, oldref=oldref, newref=newref,
-           prefix = prefix, n_patches = n_patches,
+           subject_prefix=subject_prefix, n_patches = n_patches,
            add_header="\n" + add_header if add_header else ""))
 
         f.flush()
@@ -1256,16 +1256,16 @@ option to this command.""")
     full_tree_patch_fn = f"{total_patches:04d}-full-tree-diff.patch"
 
     if args.subject_prefix:
-        prefix = args.subject_prefix
+        subject_prefix = args.subject_prefix
     else:
         try:
-            prefix = git("config --get format.subjectprefix").stdout.strip()
+            subject_prefix = git("config --get format.subjectprefix").stdout.strip()
         except subprocess.CalledProcessError:
-            prefix = "PATCH"
+            subject_prefix = "PATCH"
 
     if args.reroll_count:
         reroll_count_str = f"v{args.reroll_count}"
-        prefix = f"{prefix} {reroll_count_str}"
+        subject_prefix = f"{subject_prefix} {reroll_count_str}"
         cover_fn = f"{reroll_count_str}-{cover_fn}"
         full_tree_patch_fn = f"{reroll_count_str}-{full_tree_patch_fn}"
     else:
@@ -1276,7 +1276,7 @@ option to this command.""")
     cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file, args.signoff)
     gen_cover_letter(diff, op.join(output, cover_fn), total_patches, newbaseline,
                      git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
-                     prefix, range_diff_commits, config.format_add_header,
+                     subject_prefix, range_diff_commits, config.format_add_header,
                      cover_subject, cover_body)
     cover_path = op.join(output, cover_fn)
     print(cover_path)
@@ -1310,8 +1310,8 @@ option to this command.""")
 
                         # found the subject, re-format it
                         title = l[len(subject_header):]
-                        newf.write("Subject: [{prefix} {i}/{n_patches}] {title}".format(
-                                   prefix=prefix, i=str(i + 1).zfill(zero_fill),
+                        newf.write("Subject: [{subject_prefix} {i}/{n_patches}] {title}".format(
+                                   subject_prefix=subject_prefix, i=str(i + 1).zfill(zero_fill),
                                    n_patches=total_patches,
                                    title=title))
                         break
@@ -1326,7 +1326,7 @@ option to this command.""")
         if not args.no_full_patch:
             gen_full_tree_patch(op.join(output, full_tree_patch_fn), total_patches,
                                 oldbaseline, newbaseline, oldref, newref,
-                                prefix, config.format_add_header)
+                                subject_prefix, config.format_add_header)
             print(op.join(output, full_tree_patch_fn))
 
     if args.compose is None:
