@@ -722,13 +722,15 @@ def gen_cover_letter(diff, output_dir, reroll_count_str, n_patches, baseline, pi
     # 1:  34cf518f0aab ! 1:  3a4e12046539 <commit message>
     # Let only the lines with state == !, < or >
     reduced_range_diff = "\n".join(list(filter(lambda x: x and x.split(maxsplit=3)[2] in "!><", range_diff_commits)))
-
     zero_fill = int(log10_or_zero(n_patches)) + 1
+    if add_header:
+        add_header = f"\n{add_header}"
+
     with open(cover_path, "w") as f:
-        f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+        f.write(f"""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
-Date: {date}
-Subject: [{subject_prefix} {zeroes}/{n_patches}] {subject}
+Date: {now}
+Subject: [{subject_prefix} {'0'.zfill(zero_fill)}/{n_patches}] {subject}
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit{add_header}
@@ -738,13 +740,9 @@ Content-Transfer-Encoding: 8bit{add_header}
 baseline: {baseline}
 pile-commit: {pile_commit}
 range-diff:
-{range_diff}
+{reduced_range_diff}
 
-""".format(user=user, email=email, date=now, zeroes="0".zfill(zero_fill),
-           n_patches=n_patches, baseline=baseline, pile_commit=pile_commit, subject_prefix=subject_prefix,
-           range_diff=reduced_range_diff, add_header="\n" + add_header if add_header else "",
-           subject=subject, body=body))
-
+""")
         for l in diff:
             f.write(l)
 
