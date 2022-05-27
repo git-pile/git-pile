@@ -402,37 +402,37 @@ def cmd_setup(args):
         local_pile_branch = get_branch_from_remote_branch(args.pile_branch)
         if git_branch_exists(local_pile_branch):
             # allow case that e.g. 'origin/pile' and 'pile' point to the same commit
-            if git("rev-parse %s" % args.pile_branch).stdout == git("rev-parse %s" % local_pile_branch).stdout:
+            if git(f"rev-parse {args.pile_branch}").stdout == git(f"rev-parse {local_pile_branch}").stdout:
                 create_pile_branch = False
             elif not args.force:
-                fatal("using '%s' for pile but branch '%s' already exists and point elsewhere" % (args.pile_branch, local_pile_branch))
+                fatal(f"using '{args.pile_branch}' for pile but branch '{local_pile_branch}' already exists and point elsewhere")
     elif git_branch_exists(args.pile_branch):
         local_pile_branch = args.pile_branch
         create_pile_branch = False
     else:
-        fatal("Branch '%s' does not exist neither as local or remote branch" % args.pile_branch)
+        fatal(f"Branch '{args.pile_branch}' does not exist neither as local or remote branch")
 
     # optional arg: use current branch that is checked out in git_root_or_die()
     gitroot = git_root_or_die()
     try:
-        result_branch = args.result_branch if args.result_branch else git('-C %s symbolic-ref --short -q HEAD' % gitroot).stdout.strip()
+        result_branch = args.result_branch if args.result_branch else git(f'-C {gitroot} symbolic-ref --short -q HEAD').stdout.strip()
     except subprocess.CalledProcessError:
-        fatal("no argument passed for result branch and no branch is currently checkout at '%s'" % gitroot)
+        fatal(f"no argument passed for result branch and no branch is currently checkout at '{gitroot}'")
 
     # same as for pile branch but allow for non-existent result branch, we will just create one
     if git_remote_branch_exists(result_branch):
         local_result_branch = get_branch_from_remote_branch(result_branch)
         if git_branch_exists(local_result_branch):
             # allow case that e.g. 'origin/internal' and 'internal' point to the same commit
-            if git("rev-parse %s" % result_branch).stdout == git("rev-parse %s" % local_result_branch).stdout:
+            if git(f"rev-parse {result_branch}").stdout == git(f"rev-parse {local_result_branch}").stdout:
                 create_result_branch = False
             elif not args.force:
-                fatal("using '%s' for result but branch '%s' already exists and point elsewhere" % (result_branch, local_result_branch))
+                fatal(f"using '{result_branch}' for result but branch '{local_result_branch}' already exists and point elsewhere")
     elif git_branch_exists(result_branch):
         local_result_branch = result_branch
         create_result_branch = False
     else:
-        local_result_branch = git('-C %s symbolic-ref --short -q HEAD' % gitroot).stdout.strip()
+        local_result_branch = git(f'-C {gitroot} symbolic-ref --short -q HEAD').stdout.strip()
         create_result_branch = False
 
     # content of the pile branch looks like a pile branch?
@@ -448,59 +448,56 @@ def cmd_setup(args):
         # if pile branch is already checked out, it must be in the same
         # patchesdir on where we are trying to configure.
         if path != patchesdir:
-            fatal("branch '%s' is already checked out at '%s'"
-                  % (local_pile_branch, path))
+            fatal(f"branch '{local_pile_branch}' is already checked out at '{path}'")
         need_worktree = False
     else:
         # no checkout of pile branch. One more sanity check: the dir doesn't
         # exist yet, otherwise we could clutter whatever the user has there.
         if (op.exists(patchesdir)):
-            fatal("'%s' already exists" % args.dir)
+            fatal(f"'{args.dir}' already exists")
         need_worktree = True
 
     path = git_worktree_get_checkout_path(gitroot, local_result_branch)
     if path and path != gitroot:
-        fatal("branch '%s' is already checked out at '%s'"
-              % (local_result_branch, path))
+        fatal(f"branch '{local_result_branch}' is already checked out at '{path}'")
 
     force_arg = "-f" if args.force else ""
     # Yay, it looks like all sanity checks passed and we are not being
     # fuzzy-tested, try to do the useful work
     if create_pile_branch:
-        info("Creating branch %s" % local_pile_branch)
-        git("branch %s -t %s %s" % (force_arg, local_pile_branch, args.pile_branch))
+        info(f"Creating branch {local_pile_branch}")
+        git(f"branch {force_arg} -t {local_pile_branch} {args.pile_branch}")
     if create_result_branch:
-        info("Creating branch %s" % local_result_branch)
+        info(f"Creating branch {local_result_branch}")
         if not path:
-            git("branch %s -t %s %s" % (force_arg, local_result_branch, result_branch))
+            git(f"branch {force_arg} -t {local_result_branch} {result_branch}")
         else:
-            git("-C %s reset --hard %s" % (path, result_branch), stdout=nul_f, stderr=nul_f)
+            git(f"-C {path} reset --hard {result_branch}", stdout=nul_f, stderr=nul_f)
 
 
     if need_worktree:
         # checkout pile branch as a new worktree
         try:
-            git("-C %s worktree add --checkout %s %s" % (gitroot, args.dir, local_pile_branch),
+            git(f"-C {gitroot} worktree add --checkout {args.dir} {local_pile_branch}",
                 stdout=nul_f, stderr=nul_f)
         except:
-            fatal("failed to checkout worktree for '%s' at %s" % (local_pile_branch, args.dir))
+            fatal(f"failed to checkout worktree for '{local_pile_branch}' at {args.dir}")
 
     # write down configuration
-    git("config pile.dir %s" % args.dir)
-    git("config pile.pile-branch %s" % local_pile_branch)
-    git("config pile.result-branch %s" % local_result_branch)
+    git(f"config pile.dir {args.dir}")
+    git(f"config pile.pile-branch {local_pile_branch}")
+    git(f"config pile.result-branch {local_result_branch}")
 
     tracked_pile = git("rev-parse --abbrev-ref %s@{u}" % local_pile_branch,
                        check=False).stdout
     if tracked_pile:
-        tracked_pile = " (tracking %s)" % tracked_pile.strip()
+        tracked_pile = f" (tracking {tracked_pile.strip()})"
     tracked_result = git("rev-parse --abbrev-ref %s@{u}" % local_result_branch,
                          check=False).stdout
     if tracked_result:
-        tracked_result = " (tracking %s)" % tracked_result.strip()
+        tracked_result = f" (tracking {tracked_result.strip()})"
 
-    info("Pile branch '%s'%s setup successfully to generate branch '%s'%s" %
-         (local_pile_branch, tracked_pile, local_result_branch, tracked_result),
+    info(f"Pile branch '{local_pile_branch}'{tracked_pile} setup successfully to generate branch '{local_result_branch}'{tracked_result}",
          color=False)
 
     return 0
