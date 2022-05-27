@@ -335,27 +335,27 @@ def cmd_init(args):
     assert_required_tools()
 
     try:
-        base_commit = git("rev-parse %s" % args.baseline, stderr=nul_f).stdout.strip()
+        base_commit = git(f"rev-parse {args.baseline}", stderr=nul_f).stdout.strip()
     except subprocess.CalledProcessError:
-        fatal("invalid baseline commit %s" % args.baseline)
+        fatal(f"invalid baseline commit {args.baseline}")
 
     path = git_worktree_get_checkout_path(git_root_or_die(), args.pile_branch)
     if path:
-        fatal("branch '%s' is already checked out at '%s'" % (args.pile_branch, path))
+        fatal(f"branch '{args.pile_branch}' is already checked out at '{path}'")
 
     if (op.exists(args.dir)):
-        fatal("'%s' already exists" % args.dir)
+        fatal(f"'{args.dir}' already exists")
 
     oldconfig = Config()
 
-    git("config pile.dir %s" % args.dir)
-    git("config pile.pile-branch %s" % args.pile_branch)
-    git("config pile.result-branch %s" % args.result_branch)
+    git(f"config pile.dir {args.dir}")
+    git(f"config pile.pile-branch {args.pile_branch}")
+    git(f"config pile.result-branch {args.result_branch}")
 
     config = Config()
 
     if not git_branch_exists(config.pile_branch):
-        info("Creating branch %s" % config.pile_branch)
+        info(f"Creating branch {config.pile_branch}")
 
         # Create an orphan branch named `config.pile_branch` at the
         # `config.dir` location. Unfortunately git-branch can't do that;
@@ -367,27 +367,27 @@ def cmd_init(args):
         with tempfile.TemporaryDirectory() as d:
             git_init("pile", d)
             update_baseline(d, base_commit)
-            git("-C %s add -A" % d)
+            git(f"-C {d} add -A")
             git(["-C", d, "commit", "-m", "Initial git-pile configuration"])
 
             # Temporary repository created, now let's fetch and create our branch
-            git("fetch %s pile:%s" % (d, config.pile_branch), stdout=nul_f, stderr=nul_f)
+            git(f"fetch {d} pile:{config.pile_branch}", stdout=nul_f, stderr=nul_f)
 
 
     # checkout pile branch as a new worktree
     try:
-        git("worktree add --checkout %s %s" % (config.dir, config.pile_branch),
+        git(f"worktree add --checkout {config.dir} {config.pile_branch}",
             stdout=nul_f, stderr=nul_f)
     except:
         config.revert(oldconfig)
-        fatal("failed to checkout worktree at %s" % config.dir)
+        fatal(f"failed to checkout worktree at {config.dir}")
 
     if oldconfig.is_valid():
-        info("Reinitialized existing git-pile's branch '%s' in '%s/'" %
-             (config.pile_branch, config.dir), color=False)
+        info(f"Reinitialized existing git-pile's branch '{config.pile_branch}' in '{config.dir}/'",
+             color=False)
     else:
-        info("Initialized empty git-pile's branch '%s' in '%s/'" %
-             (config.pile_branch, config.dir), color=False)
+        info(f"Initialized empty git-pile's branch '{config.pile_branch}' in '{config.dir}/'",
+             color=False)
 
     return 0
 
