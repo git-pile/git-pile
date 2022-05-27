@@ -1271,8 +1271,7 @@ option to this command.""")
         args.no_full_patch = True
 
     creation_factor = f"--creation-factor={args.creation_factor}" if args.creation_factor else ""
-    range_diff_commits = git("range-diff --no-color --no-patch {creation_factor} {oldbaseline}..{oldref} {newbaseline}..{newref}".format(
-            creation_factor=creation_factor, oldbaseline=oldbaseline, newbaseline=newbaseline, oldref=oldref, newref=newref)).stdout.split("\n")
+    range_diff_commits = git(f"range-diff --no-color --no-patch {creation_factor} {oldbaseline}..{oldref} {newbaseline}..{newref}").stdout.split("\n")
 
     c_commits, a_commits, d_commits, diff_filter_list = _parse_range_diff(range_diff_commits)
 
@@ -1295,8 +1294,7 @@ option to this command.""")
             diff = git(["-C", tmpdir, "diff", "--cached", "-p", "--stat", '-O', order_file.name, "--no-ext-diff", "--",
                         *diff_filter_list]).stdout
             if not diff:
-                fatal("Nothing changed from %s..%s to %s..%s"
-                        % (oldbaseline, config.result_branch, newbaseline, newref))
+                fatal(f"Nothing changed from {oldbaseline}..{config.result_branch} to {newbaseline}..{newref}")
 
     if not args.output_directory and config.format_output_directory:
         output = config.format_output_directory
@@ -1326,7 +1324,7 @@ option to this command.""")
 
     cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file, args.signoff)
     cover_path = gen_cover_letter(diff, output, reroll_count_str, n_patches, newbaseline,
-            git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
+            git(f"rev-parse {config.pile_branch}").stdout.strip(),
             subject_prefix, range_diff_commits, config.format_add_header,
             cover_subject, cover_body)
 
