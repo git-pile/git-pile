@@ -590,57 +590,56 @@ def parse_commit_range(commit_range, pile_dir, default_end):
 
 
 def copy_sanitized_patch(p, pnew):
-    with open(p, "r") as oldf:
-        with open(pnew, "w") as newf:
-            it = iter(oldf)
+    with open(p, "r") as oldf, open(pnew, "w") as newf:
+        it = iter(oldf)
 
-            # everything before the diff is allowed
+        # everything before the diff is allowed
+        for l in it:
+            newf.write(l)
+            if l == "---\n":
+                break
+        else:
+            fatal(f"malformed patch {p}\n")
+
+        # any additional patch context (like stat) is allowed
+        for l in it:
+            newf.write(l)
+            if l.startswith("diff --git"):
+                break
+        else:
+            fatal(f"malformed patch {p}\n")
+
+
+        while True:
+            # hunk header: everything but "index lines" are allowed,
+            # except if we are in a binary patch: in that case the
+            # index must be maintained otherwise it's not possible to
+            # reconstruct the branch
+            hunk_header = []
+            index_line = -1
+            is_binary = False
             for l in it:
-                newf.write(l)
-                if l == "---\n":
+                hunk_header.append(l)
+                if l.startswith("@@"):
                     break
-            else:
-                fatal(f"malformed patch {p}\n")
+                if l.startswith("GIT binary patch"):
+                    is_binary = True
+                    break
+                if l.startswith("index"):
+                    index_line = len(hunk_header) - 1
 
-            # any additional patch context (like stat) is allowed
+            if not is_binary and index_line >= 0:
+                hunk_header.pop(index_line)
+
+            newf.writelines(hunk_header)
+
             for l in it:
                 newf.write(l)
                 if l.startswith("diff --git"):
                     break
             else:
-                fatal(f"malformed patch {p}\n")
-
-
-            while True:
-                # hunk header: everything but "index lines" are allowed,
-                # except if we are in a binary patch: in that case the
-                # index must be maintained otherwise it's not possible to
-                # reconstruct the branch
-                hunk_header = []
-                index_line = -1
-                is_binary = False
-                for l in it:
-                    hunk_header.append(l)
-                    if l.startswith("@@"):
-                        break
-                    if l.startswith("GIT binary patch"):
-                        is_binary = True
-                        break
-                    if l.startswith("index"):
-                        index_line = len(hunk_header) - 1
-
-                if not is_binary and index_line >= 0:
-                    hunk_header.pop(index_line)
-
-                newf.writelines(hunk_header)
-
-                for l in it:
-                    newf.write(l)
-                    if l.startswith("diff --git"):
-                        break
-                else:
-                    # EOF, break outer loop
-                    break
+                # EOF, break outer loop
+                break
 
 
 # pre-existent patches are removed, all patches written from commit_range,
@@ -804,29 +803,28 @@ def gen_individual_patches(output_dir, reroll_count_str, n_patches, subject_pref
 
             # Copy patches to the final output direcory fixing the Subject
             # lines to conform with the patch order and prefix
-            with open(old, "r") as oldf:
-                with open(new, "w") as newf:
-                    # parse header
-                    subject_header = "Subject: [PATCH] "
-                    for l in oldf:
-                        if l == "\n":
-                            # header end, give up, don't try to parse the body
-                            fatal(f"patch '{old}' missing subject?")
-                        if not l.startswith(subject_header):
-                            # header line != subject, just copy it
-                            newf.write(l)
-                            continue
-
-                        # found the subject, re-format it
-                        title = l[len(subject_header):]
-                        num = str(i + 1).zfill(zero_fill)
-                        newf.write(f"Subject: [{subject_prefix} {num}/{n_patches}] {title}")
-                        break
-                    else:
+            with open(old, "r") as oldf, open(new, "w") as newf:
+                # parse header
+                subject_header = "Subject: [PATCH] "
+                for l in oldf:
+                    if l == "\n":
+                        # header end, give up, don't try to parse the body
                         fatal(f"patch '{old}' missing subject?")
+                    if not l.startswith(subject_header):
+                        # header line != subject, just copy it
+                        newf.write(l)
+                        continue
 
-                    # write all the other lines after Subject header at once
-                    newf.writelines(oldf.readlines())
+                    # found the subject, re-format it
+                    title = l[len(subject_header):]
+                    num = str(i + 1).zfill(zero_fill)
+                    newf.write(f"Subject: [{subject_prefix} {num}/{n_patches}] {title}")
+                    break
+                else:
+                    fatal(f"patch '{old}' missing subject?")
+
+                # write all the other lines after Subject header at once
+                newf.writelines(oldf.readlines())
 
             print(new)
             patches.append(new)
