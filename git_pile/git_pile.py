@@ -1693,13 +1693,13 @@ def cmd_destroy(args):
     rm_ = run_wrapper('rm', capture=True, check=False, print_error_as_ignored=True)
 
     if config.dir and op.exists(config.dir):
-        git_("worktree remove --force {d}".format(d=config.dir))
-        rm_("-rf {d}".format(d=config.dir))
+        git_(f"worktree remove --force {config.dir}")
+        rm_(f"-rf {config.dir}")
 
     git_("worktree prune")
 
     if config.pile_branch:
-        git_("branch -D {d}".format(d=config.pile_branch))
+        git_(f"branch -D {config.pile_branch}")
 
 
 def cmd_reset(args):
