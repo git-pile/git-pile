@@ -660,10 +660,10 @@ def genpatches(output, base_commit, result_commit):
     # 4) To avoid filename clashes due to (3), check for each patch if a file
     #    already exists and workaround it
 
-    commit_range = "%s..%s" % (base_commit, result_commit)
-    commit_list = git("rev-list --reverse %s" % commit_range).stdout.strip().split('\n')
+    commit_range = f"{base_commit}..{result_commit}"
+    commit_list = git(f"rev-list --reverse {commit_range}").stdout.strip().split('\n')
     if not commit_list:
-        fatal("No commits in range %s" % commit_range)
+        fatal(f"No commits in range {commit_range}")
 
     series = generate_series_list(commit_range, ".patch")
 
@@ -856,22 +856,22 @@ def cmd_genpatches(args):
 
         output = args.output_directory
         if has_patches(output) and not args.force:
-            fatal("'%s' is not default output directory and has patches in it.\n"
-                  "Force with --force or pass an empty/non-existent directory" % output)
+            fatal(f"'{output}' is not default output directory and has patches in it.\n"
+                  "Force with --force or pass an empty/non-existent directory")
     else:
         output = patchesdir
 
     genpatches(output, base, result)
 
     if commit_result:
-        git("-C %s add series config *.patch" % output)
+        git(f"-C {output} add series config *.patch")
         commit_cmd = ["-C", output,  "commit"]
         if args.message:
             commit_cmd += ["-m", args.message]
 
         print(args.message)
         if git(commit_cmd, check=False, capture=False, stdout=None, stderr=None).returncode != 0:
-            fatal("patches generated at '%s', but git-commit failed. Leaving result in place." % output)
+            fatal(f"patches generated at '{output}', but git-commit failed. Leaving result in place.")
 
     return 0
 
