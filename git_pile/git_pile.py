@@ -139,7 +139,7 @@ class Config:
 
 
 def git_branch_exists(branch):
-    return git("show-ref --verify --quiet refs/heads/%s" % branch, check=False).returncode == 0
+    return git(f"show-ref --verify --quiet refs/heads/{branch}", check=False).returncode == 0
 
 
 def git_ref_exists(ref):
@@ -147,7 +147,7 @@ def git_ref_exists(ref):
 
 
 def git_remote_branch_exists(remote_and_branch):
-    return git("show-ref --verify --quiet refs/remotes/%s" % remote_and_branch, check=False).returncode == 0
+    return git(f"show-ref --verify --quiet refs/remotes/{remote_and_branch}", check=False).returncode == 0
 
 
 def git_init(branch, directory):
@@ -171,7 +171,7 @@ def git_root_or_die():
 # or None.
 def git_worktree_get_checkout_path(root, branch):
     state = dict()
-    out = git("-C %s worktree list --porcelain" % root).stdout.split("\n")
+    out = git(f"-C {root} worktree list --porcelain").stdout.split("\n")
     path = None
 
     for l in out:
@@ -197,7 +197,7 @@ def git_worktree_get_checkout_path(root, branch):
 # Get the git dir (aka .git) directory for the worktree related to
 # the @path. @path defaults to CWD
 def git_worktree_get_git_dir(path='.'):
-    return git("-C %s rev-parse --git-dir" % path).stdout.strip("\n")
+    return git(f"-C {path} rev-parse --git-dir").stdout.strip("\n")
 
 
 @contextmanager
@@ -235,7 +235,7 @@ def _parse_baseline_line(iterable):
 
 def get_baseline_from_branch(branch):
     try:
-        out = git("show %s:config --" % branch).stdout
+        out = git(f"show {branch}:config --").stdout
     except subprocess.CalledProcessError:
         fatal(f"'{branch}' doesn't look like a valid ref for pile branch: config file not found")
     return _parse_baseline_line(out.splitlines())
@@ -248,8 +248,8 @@ def get_baseline(d):
 
 def update_baseline(d, commit):
     with open(op.join(d, "config"), "w") as f:
-        rev = git("rev-parse %s" % commit).stdout.strip()
-        f.write("BASELINE=%s" % rev)
+        rev = git(f"rev-parse {commit}").stdout.strip()
+        f.write(f"BASELINE={rev}")
 
 
 def update_series(d, series_list):
@@ -275,7 +275,7 @@ def get_branch_from_remote_branch(remote_branch):
 
 def assert_valid_pile_branch(pile):
     # --full-tree is necessary so we don't need "-C gitroot"
-    out = git("ls-tree -r --name-only --full-tree %s" % pile).stdout
+    out = git(f"ls-tree -r --name-only --full-tree {pile}").stdout
     has_config = False
     has_series = False
     non_patches = False
@@ -299,17 +299,17 @@ def assert_valid_pile_branch(pile):
 
 def assert_valid_result_branch(result_branch, baseline):
     try:
-        git("rev-parse %s" % baseline, stderr=nul_f)
+        git(f"rev-parse {baseline}", stderr=nul_f)
     except subprocess.CalledProcessError:
-        fatal("invalid baseline commit %s" % baseline)
+        fatal(f"invalid baseline commit {baseline}")
 
     try:
-        out = git("merge-base %s %s" % (baseline, result_branch)).stdout.strip()
+        out = git(f"merge-base {baseline} {result_branch}").stdout.strip()
     except subprocess.CalledProcessError:
         out = None
 
     if out != baseline:
-        fatal("branch '%s' does not contain baseline %s" % (result_branch, baseline))
+        fatal(f"branch '{result_branch}' does not contain baseline {baseline}")
 
 
 # Create a temporary directory to checkout a detached branch with git-worktree
@@ -324,11 +324,11 @@ def temporary_worktree(commit, dir, prefix="git-pile-worktree"):
 
     try:
         with tempfile.TemporaryDirectory(dir=dir, prefix=prefix) as d:
-            git("worktree add --detach --checkout %s %s" % (d, commit),
+            git(f"worktree add --detach --checkout {d} {commit}",
                 stdout=nul_f, stderr=nul_f)
             yield d
     finally:
-        git("worktree remove %s" % d)
+        git(f"worktree remove {d}")
 
 
 def cmd_init(args):
@@ -519,7 +519,7 @@ def fix_duplicate_patch_names(patches):
         retry = 2
         while newp in ret:
             if retry > max_retries:
-                raise Exception("wat!?! '%s' (max_retries=%d)" % (p, max_retries))
+                raise Exception(f"wat!?! '{p}' (max_retries={max_retries})")
             newp = p + "-%d" % retry
             retry += 1
 
@@ -538,7 +538,7 @@ def generate_series_list(commit_range, suffix):
     series = [x[0:52] for x in series]
     series = fix_duplicate_patch_names(series)
     # add 0001 and .patch prefix/suffix
-    series = ["0001-{name}{suffix}".format(name=x, suffix=suffix) for x in series]
+    series = [f"0001-{x}{suffix}" for x in series]
 
     return series if not single_arg else series[0]
 
@@ -551,7 +551,7 @@ def rm_patches(dest):
         try:
             os.remove(entry.path)
         except PermissionError:
-            fatal("Could not remove %s: permission denied" % entry.path)
+            fatal(f"Could not remove {entry.path}: permission denied")
 
 
 def has_patches(dest):
@@ -571,23 +571,23 @@ def parse_commit_range(commit_range, pile_dir, default_end):
     if not commit_range:
         baseline = get_baseline(pile_dir)
         if not baseline:
-            fatal("no BASELINE configured in %s" % pile_dir)
+            fatal(f"no BASELINE configured in {pile_dir}")
         return baseline, default_end
 
     range = commit_range.split("..")
     if len(range) == 1:
         range.append("HEAD")
     elif range[0] == "":
-        fatal("Invalid commit range '%s'" % commit_range)
+        fatal(f"Invalid commit range '{commit_range}'")
     elif range[1] == "":
         range[1] = "HEAD"
     base, result = range
     # sanity checks
     try:
-        git("rev-parse %s" % base, stderr=nul_f, stdout=nul_f)
-        git("rev-parse %s" % result, stderr=nul_f, stdout=nul_f)
+        git(f"rev-parse {base}", stderr=nul_f, stdout=nul_f)
+        git(f"rev-parse {result}", stderr=nul_f, stdout=nul_f)
     except (ValueError, subprocess.CalledProcessError):
-        fatal("Invalid commit range: %s" % commit_range)
+        fatal(f"Invalid commit range: {commit_range}")
 
     return base, result
 
@@ -603,7 +603,7 @@ def copy_sanitized_patch(p, pnew):
                 if l == "---\n":
                     break
             else:
-                fatal("malformed patch %s\n" % p)
+                fatal(f"malformed patch {p}\n")
 
             # any additional patch context (like stat) is allowed
             for l in it:
@@ -611,7 +611,7 @@ def copy_sanitized_patch(p, pnew):
                 if l.startswith("diff --git"):
                     break
             else:
-                fatal("malformed patch %s\n" % p)
+                fatal(f"malformed patch {p}\n")
 
 
             while True:
@@ -907,7 +907,7 @@ class PileCover:
 
         m = email.message_from_binary_file(f)
         if not m:
-            error("No patches in '%s'" % fname if fname else "stdin")
+            error(f'No patches in \'{fname if fname else "stdin"}\'')
             return None
 
         body_list = m.get_payload(decode=True).decode().splitlines()
@@ -950,14 +950,14 @@ class PileCover:
                 warn("Unknown pile information on cover letter:", elems[0])
 
         if not baseline or not pile_commit:
-            error("Failed to find pile information in cover letter (baseline=%s, pile_commit=%s)" % (baseline, pile_commit))
+            error(f"Failed to find pile information in cover letter (baseline={baseline}, pile_commit={pile_commit})")
             return None
 
         return PileCover(m, version, baseline, pile_commit)
 
     def dump(self, f):
         from_str = self.m.get_unixfrom() or "0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001"
-        f.write("From %s\n" % from_str)
+        f.write(f"From {from_str}\n")
 
         for k, v in zip(self.m.keys(), self.m.values()):
             if k.lower() == "subject" or k.lower() == "from":
@@ -974,7 +974,7 @@ class PileCover:
                     else:
                             vfinal = vfinal + v
                 v = vfinal
-            print("%s: %s" % (k, v), file=f)
+            print(f"{k}: {v}", file=f)
 
         f.write("\n")
         f.write(self.m.get_payload(decode=False))
@@ -1105,13 +1105,13 @@ Good luck! ¯\_(ツ)_/¯"""  % (config.dir, config.pile_branch))
 def check_baseline_exists(baseline):
     ret = git_can_fail("cat-file -e {baseline}".format(baseline=baseline))
     if ret.returncode != 0:
-        fatal("""baseline commit '%s' not found!
+        fatal(f"""baseline commit '{baseline}' not found!
 
 If the baseline tree has been force-pushed, the old baseline commits
 might have been pruned from the local repository. If the baselines are
 stored in the remote, they can be downloaded again with git fetch by
 specifying the relevant refspec, either one-off directly in the command
-or permanently in the git configuration file of the local repo.""" % (baseline))
+or permanently in the git configuration file of the local repo.""")
 
 
 def git_ref_is_ancestor(ancestor, ref):
@@ -1120,13 +1120,13 @@ def git_ref_is_ancestor(ancestor, ref):
 
 def check_baseline_is_ancestor(baseline, ref):
     if not git_ref_is_ancestor(baseline, ref):
-        fatal("""baseline '%s' is not an ancestor of ref '%s'.
+        fatal(f"""baseline '{baseline}' is not an ancestor of ref '{ref}'.
 
 Note that the pile baseline is implicitly used when no baseline is specified,
 so this error commonly occurs when the pile is not updated when the working
 branch is and no baseline is specified. If a branch non based on the pile
 baseline is intentionally being used, a baseline must be specified as well.
-See the help of this command for extra details""" % (baseline, ref))
+See the help of this command for extra details""")
 
 
 # Parse refs from command line
