@@ -764,10 +764,13 @@ def gen_full_tree_patch(output_dir, reroll_count_str, n_patches, oldbaseline, ne
        full_tree_patch_fn = f"{reroll_count_str}-{full_tree_patch_fn}"
     full_tree_patch_path = op.join(output_dir, full_tree_patch_fn)
 
+    if add_header:
+        add_header = f"\n{add_header}"
+
     with open(full_tree_patch_path, "w") as f:
-        f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+        f.write(f"""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
-Date: {date}
+Date: {now}
 Subject: [{subject_prefix} {n_patches}/{n_patches}] REVIEW: Full tree diff against {oldref}
 MIME-Version: 1.0
 Content-Type: text/x-patch; charset=UTF-8
@@ -775,15 +778,13 @@ Content-Transfer-Encoding: 8bit{add_header}
 
 Auto-generated diff between {oldref}..{newref}
 ---
-""".format(user=user, email=email, date=now, oldref=oldref, newref=newref,
-           subject_prefix=subject_prefix, n_patches = n_patches,
-           add_header="\n" + add_header if add_header else ""))
+""")
 
         f.flush()
-        git("diff --stat -p --no-ext-diff {oldref}..{newref}".format(oldref=oldref, newref=newref), stdout=f)
+        git(f"diff --stat -p --no-ext-diff {oldref}..{newref}", stdout=f)
         f.flush()
 
-        f.write("--\ngit-pile {version}\n\n".format(version=__version__))
+        f.write(f"--\ngit-pile {__version__}\n\n")
 
     print(full_tree_patch_path)
 
