@@ -1668,8 +1668,7 @@ def cmd_baseline(args):
         b_branch = get_baseline_from_branch(config.pile_branch)
 
         if b_dir != b_branch:
-            fatal("Pile branch '%s' has baseline %s, but directory is currently at %s"
-                  % (config.pile_branch, b_branch, b_dir))
+            fatal(f"Pile branch '{config.pile_branch}' has baseline {b_branch}, but directory is currently at {b_dir}")
     else:
         b_branch = get_baseline_from_branch(args.ref)
 
