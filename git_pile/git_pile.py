@@ -1060,14 +1060,14 @@ def cmd_am(args):
     if not sys.stdin.isatty() and sys.stdout.isatty():
         sys.stdin = open('/dev/tty')
 
-    info("Entering '%s' directory" % config.dir)
+    info(f"Entering '{config.dir}' directory")
     gitdir = git_worktree_get_git_dir(patchesdir)
     if op.isdir(op.join(gitdir, "rebase-apply")):
         fatal(f"Already on am or rebase operation in worktree {patchesdir}", file=sys.stderr)
 
     if args.strategy == "pile-commit":
         if git(["-C", patchesdir, "reset", "--hard", cover.pile_commit], check=False).returncode != 0:
-            print("Could not checkout commit %s\n as baseline - you probably need to git-fetch it." % cover.pile_commit,
+            print(f"Could not checkout commit {cover.pile_commit}\n as baseline - you probably need to git-fetch it.",
                   file=sys.stderr)
 
     with subprocess.Popen(["git", "-C", patchesdir, "am", "-3", "--whitespace=nowarn"],
@@ -1081,21 +1081,22 @@ def cmd_am(args):
             proc.returncode = 0
 
     if proc.returncode != 0:
-        fatal("""git-pile am failed, you will need to continue manually.
+        fatal(f"""git-pile am failed, you will need to continue manually.
 
-The '%s' directory is in branch '%s' in the middle of patching the series. You
+The '{config.dir}' directory is in branch '{config.pile_branch}' in the middle of patching the series. You
 need to fix the conflicts, add the files and finalize with:
 
     git am --continue
 
-Good luck! ¯\_(ツ)_/¯"""  % (config.dir, config.pile_branch))
+Good luck! ¯\_(ツ)_/¯""")
 
     if args.genbranch:
-        info("Generating branch '%s'" % config.result_branch)
+        info(f"Generating branch '{config.result_branch}'")
         genbranch_args = parse_args(["genbranch", "--force"])
         return cmd_genbranch(genbranch_args)
 
     return 0
+
 
 def check_baseline_exists(baseline):
     ret = git_can_fail("cat-file -e {baseline}".format(baseline=baseline))
