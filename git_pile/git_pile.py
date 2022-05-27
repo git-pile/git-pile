@@ -1450,9 +1450,9 @@ def _genbranch(root, patchesdir, config, args):
         if not args.branch:
             # use whatever is currently checked out, might as well be in
             # detached state
-            git("reset --hard %s" % baseline)
+            git(f"reset --hard {baseline}")
         else:
-            git("checkout -B %s %s" % (args.branch, baseline))
+            git(f"checkout -B {args.branch} {baseline}")
 
         any_fallback = False
 
@@ -1495,7 +1495,7 @@ pile patches.""")
         path = git_worktree_get_checkout_path(root, branch)
 
         if path and not args.force:
-            error("can't use branch '%s' because it is checked out at '%s'" % (branch, path))
+            error(f"can't use branch '{branch}' because it is checked out at '{path}'")
             return 1
 
         if patchlist:
@@ -1508,9 +1508,9 @@ pile patches.""")
 
         if path:
             # args.force checked earlier
-            git("-C %s reset --hard %s" % (path, head), stdout=nul_f, stderr=nul_f)
+            git(f"-C {path} reset --hard {head}", stdout=nul_f, stderr=nul_f)
         else:
-            git("-C %s checkout -f -B %s %s" % (d, branch, head), stdout=nul_f, stderr=nul_f)
+            git(f"-C {d} checkout -f -B {branch} {head}", stdout=nul_f, stderr=nul_f)
 
     return 0
 
