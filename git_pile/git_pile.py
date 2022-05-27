@@ -814,7 +814,7 @@ def gen_individual_patches(output_dir, reroll_count_str, n_patches, subject_pref
                     for l in oldf:
                         if l == "\n":
                             # header end, give up, don't try to parse the body
-                            fatal("patch '%s' missing subject?" % old)
+                            fatal(f"patch '{old}' missing subject?")
                         if not l.startswith(subject_header):
                             # header line != subject, just copy it
                             newf.write(l)
@@ -822,13 +822,11 @@ def gen_individual_patches(output_dir, reroll_count_str, n_patches, subject_pref
 
                         # found the subject, re-format it
                         title = l[len(subject_header):]
-                        newf.write("Subject: [{subject_prefix} {i}/{n_patches}] {title}".format(
-                                   subject_prefix=subject_prefix, i=str(i + 1).zfill(zero_fill),
-                                   n_patches=n_patches,
-                                   title=title))
+                        num = str(i + 1).zfill(zero_fill)
+                        newf.write(f"Subject: [{subject_prefix} {num}/{n_patches}] {title}")
                         break
                     else:
-                        fatal("patch '%s' missing subject?" % old)
+                        fatal(f"patch '{old}' missing subject?")
 
                     # write all the other lines after Subject header at once
                     newf.writelines(oldf.readlines())
