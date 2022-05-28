@@ -708,22 +708,27 @@ def get_cover_letter_message(commit_with_message, file_with_message, signoff):
     return subject, body
 
 
-def gen_cover_letter(diff, output, n_patches, baseline, pile_commit, prefix, range_diff_commits, add_header, subject, body):
+def gen_cover_letter(diff, output_dir, reroll_count_str, n_patches, baseline, pile_commit, subject_prefix, range_diff_commits, add_header, subject, body):
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
     now = strftime("%a, %d %b %Y %T %z")
+
+    cover_fn = "0000-cover-letter.patch"
+    if reroll_count_str:
+        cover_fn = f"{reroll_count_str}-{cover_fn}"
+    cover_path = op.join(output_dir, cover_fn)
 
     # 1:  34cf518f0aab ! 1:  3a4e12046539 <commit message>
     # Let only the lines with state == !, < or >
     reduced_range_diff = "\n".join(list(filter(lambda x: x and x.split(maxsplit=3)[2] in "!><", range_diff_commits)))
 
     zero_fill = int(log10_or_zero(n_patches)) + 1
-    with open(output, "w") as f:
+    with open(cover_path, "w") as f:
         f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
 Date: {date}
-Subject: [{prefix} {zeroes}/{n_patches}] {subject}
+Subject: [{subject_prefix} {zeroes}/{n_patches}] {subject}
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit{add_header}
@@ -736,7 +741,7 @@ range-diff:
 {range_diff}
 
 """.format(user=user, email=email, date=now, zeroes="0".zfill(zero_fill),
-           n_patches=n_patches, baseline=baseline, pile_commit=pile_commit, prefix=prefix,
+           n_patches=n_patches, baseline=baseline, pile_commit=pile_commit, subject_prefix=subject_prefix,
            range_diff=reduced_range_diff, add_header="\n" + add_header if add_header else "",
            subject=subject, body=body))
 
@@ -745,18 +750,27 @@ range-diff:
 
         f.write("--\ngit-pile {version}\n\n".format(version=__version__))
 
+    print(cover_path)
 
-def gen_full_tree_patch(output, n_patches, oldbaseline, newbaseline, oldref, newref, prefix, add_header):
+    return cover_path
+
+
+def gen_full_tree_patch(output_dir, reroll_count_str, n_patches, oldbaseline, newbaseline, oldref, newref, subject_prefix, add_header):
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
     now = strftime("%a, %d %b %Y %T %z")
 
-    with open(output, "w") as f:
+    full_tree_patch_fn = f"{n_patches:04d}-full-tree-diff.patch"
+    if reroll_count_str:
+       full_tree_patch_fn = f"{reroll_count_str}-{full_tree_patch_fn}"
+    full_tree_patch_path = op.join(output_dir, full_tree_patch_fn)
+
+    with open(full_tree_patch_path, "w") as f:
         f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
 Date: {date}
-Subject: [{prefix} {n_patches}/{n_patches}] REVIEW: Full tree diff against {oldref}
+Subject: [{subject_prefix} {n_patches}/{n_patches}] REVIEW: Full tree diff against {oldref}
 MIME-Version: 1.0
 Content-Type: text/x-patch; charset=UTF-8
 Content-Transfer-Encoding: 8bit{add_header}
@@ -764,7 +778,7 @@ Content-Transfer-Encoding: 8bit{add_header}
 Auto-generated diff between {oldref}..{newref}
 ---
 """.format(user=user, email=email, date=now, oldref=oldref, newref=newref,
-           prefix = prefix, n_patches = n_patches,
+           subject_prefix=subject_prefix, n_patches = n_patches,
            add_header="\n" + add_header if add_header else ""))
 
         f.flush()
@@ -772,6 +786,57 @@ Auto-generated diff between {oldref}..{newref}
         f.flush()
 
         f.write("--\ngit-pile {version}\n\n".format(version=__version__))
+
+    print(full_tree_patch_path)
+
+
+def gen_individual_patches(output_dir, reroll_count_str, n_patches, subject_prefix, add_header, a_commits):
+    zero_fill = int(log10_or_zero(n_patches)) + 1
+    patches = []
+
+    with tempfile.TemporaryDirectory() as d:
+        for i, c in enumerate(a_commits):
+            format_cmd = ["format-patch", "--subject-prefix=PATCH", "--zero-commit", "--signature="]
+            if add_header:
+                format_cmd.extend(["--add-header", add_header])
+            format_cmd.extend(["-o", d, "-N", "-1", c[1]])
+
+            old = git(format_cmd).stdout.strip()
+            new = op.join(output_dir, "%s%04d-%s" % (f"{reroll_count_str}-" if reroll_count_str else "",
+                i + 1,
+                old[len(d) + 1 + 5:]))
+
+            # Copy patches to the final output direcory fixing the Subject
+            # lines to conform with the patch order and prefix
+            with open(old, "r") as oldf:
+                with open(new, "w") as newf:
+                    # parse header
+                    subject_header = "Subject: [PATCH] "
+                    for l in oldf:
+                        if l == "\n":
+                            # header end, give up, don't try to parse the body
+                            fatal("patch '%s' missing subject?" % old)
+                        if not l.startswith(subject_header):
+                            # header line != subject, just copy it
+                            newf.write(l)
+                            continue
+
+                        # found the subject, re-format it
+                        title = l[len(subject_header):]
+                        newf.write("Subject: [{subject_prefix} {i}/{n_patches}] {title}".format(
+                                   subject_prefix=subject_prefix, i=str(i + 1).zfill(zero_fill),
+                                   n_patches=n_patches,
+                                   title=title))
+                        break
+                    else:
+                        fatal("patch '%s' missing subject?" % old)
+
+                    # write all the other lines after Subject header at once
+                    newf.writelines(oldf.readlines())
+
+            print(new)
+            patches.append(new)
+    return patches
 
 
 def cmd_genpatches(args):
@@ -1248,86 +1313,37 @@ option to this command.""")
     os.makedirs(output or '.', exist_ok=True)
     rm_patches(output or '.')
 
-    total_patches = len(a_commits)
+    n_patches = len(a_commits)
     if not args.no_full_patch:
-        total_patches += 1
-
-    cover_fn = "0000-cover-letter.patch"
-    full_tree_patch_fn = f"{total_patches:04d}-full-tree-diff.patch"
+        n_patches += 1
 
     if args.subject_prefix:
-        prefix = args.subject_prefix
+        subject_prefix = args.subject_prefix
     else:
         try:
-            prefix = git("config --get format.subjectprefix").stdout.strip()
+            subject_prefix = git("config --get format.subjectprefix").stdout.strip()
         except subprocess.CalledProcessError:
-            prefix = "PATCH"
+            subject_prefix = "PATCH"
 
     if args.reroll_count:
         reroll_count_str = f"v{args.reroll_count}"
-        prefix = f"{prefix} {reroll_count_str}"
-        cover_fn = f"{reroll_count_str}-{cover_fn}"
-        full_tree_patch_fn = f"{reroll_count_str}-{full_tree_patch_fn}"
+        subject_prefix = f"{subject_prefix} {reroll_count_str}"
     else:
         reroll_count_str = ""
 
-    zero_fill = int(log10_or_zero(total_patches)) + 1
-
     cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file, args.signoff)
-    gen_cover_letter(diff, op.join(output, cover_fn), total_patches, newbaseline,
-                     git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
-                     prefix, range_diff_commits, config.format_add_header,
-                     cover_subject, cover_body)
-    cover_path = op.join(output, cover_fn)
-    print(cover_path)
+    cover_path = gen_cover_letter(diff, output, reroll_count_str, n_patches, newbaseline,
+            git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
+            subject_prefix, range_diff_commits, config.format_add_header,
+            cover_subject, cover_body)
 
-    with tempfile.TemporaryDirectory() as d:
-        for i, c in enumerate(a_commits):
-            format_cmd = ["format-patch", "--subject-prefix=PATCH", "--zero-commit", "--signature="]
-            if config.format_add_header:
-                format_cmd.extend(["--add-header", config.format_add_header])
-            format_cmd.extend(["-o", d, "-N", "-1", c[1]])
+    gen_individual_patches(output, reroll_count_str, n_patches,
+            subject_prefix, config.format_add_header, a_commits)
 
-            old = git(format_cmd).stdout.strip()
-            new = op.join(output, "%s%04d-%s" % (f"{reroll_count_str}-" if reroll_count_str else "",
-                                                 i + 1,
-                                                 old[len(d) + 1 + 5:]))
-
-            # Copy patches to the final output direcory fixing the Subject
-            # lines to conform with the patch order and prefix
-            with open(old, "r") as oldf:
-                with open(new, "w") as newf:
-                    # parse header
-                    subject_header = "Subject: [PATCH] "
-                    for l in oldf:
-                        if l == "\n":
-                            # header end, give up, don't try to parse the body
-                            fatal("patch '%s' missing subject?" % old)
-                        if not l.startswith(subject_header):
-                            # header line != subject, just copy it
-                            newf.write(l)
-                            continue
-
-                        # found the subject, re-format it
-                        title = l[len(subject_header):]
-                        newf.write("Subject: [{prefix} {i}/{n_patches}] {title}".format(
-                                   prefix=prefix, i=str(i + 1).zfill(zero_fill),
-                                   n_patches=total_patches,
-                                   title=title))
-                        break
-                    else:
-                        fatal("patch '%s' missing subject?" % old)
-
-                    # write all the other lines after Subject header at once
-                    newf.writelines(oldf.readlines())
-
-            print(new)
-
-        if not args.no_full_patch:
-            gen_full_tree_patch(op.join(output, full_tree_patch_fn), total_patches,
-                                oldbaseline, newbaseline, oldref, newref,
-                                prefix, config.format_add_header)
-            print(op.join(output, full_tree_patch_fn))
+    if not args.no_full_patch:
+        gen_full_tree_patch(output, reroll_count_str, n_patches,
+                            oldbaseline, newbaseline, oldref, newref,
+                            subject_prefix, config.format_add_header)
 
     if args.compose is None:
         compose = config.format_compose
@@ -1397,7 +1413,7 @@ def _genbranch(root, patchesdir, config, args):
     if not config.check_is_valid():
         return 1
 
-    baseline = get_baseline(patchesdir)
+    baseline = args.baseline or get_baseline(patchesdir)
 
     # Make sure the baseline hasn't been pruned
     check_baseline_exists(baseline);
@@ -1943,14 +1959,17 @@ series  config  X'.patch  Y'.patch  Z'.patch
         action="store_true",
         dest="fuzzy",
         default=None)
-
-    parser_genbranch.set_defaults(func=cmd_genbranch)
     parser_genbranch.add_argument(
         "--dirty",
         help="Just apply the patches, do not create the corresponding commits",
         action="store_true",
         dest="dirty",
         default=False)
+    parser_genbranch.add_argument(
+        "-x", "--baseline",
+        help="Ignoring baseline from pile, use whatever provided as argument",
+        default=None)
+    parser_genbranch.set_defaults(func=cmd_genbranch)
 
     # format-patch
     parser_format_patch = subparsers.add_parser('format-patch', help="Generate patches from BASELINE..HEAD and save patch series to output directory to be shared on a mailing list",
