@@ -1477,7 +1477,7 @@ def git_am_apply_fallbacks(apply_cmd, args, stdout, stderr, env):
         if ret.returncode == 0:
             for l in git("status --porcelain").stdout.splitlines():
                 f = Path(l.split()[1])
-                if l[0] == "?" and l[1] == "?" and not f in untracked_files:
+                if l[0] == "?" and l[1] == "?" and f not in untracked_files:
                     git(f"add {f}")
                 else:
                     git(f"add {f}")
