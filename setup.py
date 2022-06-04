@@ -40,7 +40,7 @@ setup(
     include_package_data=True,
     maintainer_email="lucas.demarchi@intel.com",
     license="LGPLv2+",
-    scripts=["git-pile", "git-mbox-prepare"],
+    scripts=["git-pile"],
     classifiers=['Intended Audience :: Developers',
                  'License :: OSI Approved',
                  'Programming Language :: Python',
