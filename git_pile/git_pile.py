@@ -882,7 +882,10 @@ class PileCover:
         if fname is None:
             oldf = sys.stdin.buffer
         else:
-            oldf = open(fname, 'rb')
+            try:
+                oldf = open(fname, 'rb')
+            except FileNotFoundError as e:
+                fatal(e)
 
         # look-ahead on first line and fix up if needed
         l0 = oldf.readline()
