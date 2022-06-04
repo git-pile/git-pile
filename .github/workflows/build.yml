@@ -21,6 +21,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - uses: psf/black@stable
+        with:
+          options: "--check --diff --verbose"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
