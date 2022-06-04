@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ '3.6', '3.7', '3.9', '3.10' ]
+        #python-version: [ '3.6', '3.7', '3.9', '3.10' ]
+        python-version: [ '3.7', '3.9', '3.10' ]
     steps:
       - uses: actions/checkout@v3
 
@@ -31,8 +32,30 @@ jobs:
           # stop the build if there are Python syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82,F841 --show-source --statistics
 
-      - name: Install
-        run:  python -m pip install -e .
+      - name: Test venv installation
+        run: |
+          python3 -m venv testvenv
+          testvenv/bin/python3 -m pip install .
+          testvenv/bin/git-pile -v
+          rm -r testvenv
 
-      - name: Sanity check - run
-        run: git pile --version
+      - name: Test user installation
+        run: |
+          python3 -m pip install --user .
+          $HOME/.local/bin/git-pile -v
+          python3 -m pip uninstall --yes git-pile
+
+      - name: Test editable user installation
+        run: |
+          python3 -m pip install --user --editable .
+          $HOME/.local/bin/git-pile -v
+
+      - name: Test git PATH integration
+        run: |
+          git pile --version
+
+      - name: Test uninstalled git-pile
+        run: |
+          python3 -m pip uninstall --yes git-pile
+          export PATH=$PWD:$PATH
+          git pile --version
