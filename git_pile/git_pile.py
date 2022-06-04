@@ -139,7 +139,7 @@ class Config:
 
 
 def git_branch_exists(branch):
-    return git("show-ref --verify --quiet refs/heads/%s" % branch, check=False).returncode == 0
+    return git(f"show-ref --verify --quiet refs/heads/{branch}", check=False).returncode == 0
 
 
 def git_ref_exists(ref):
@@ -147,7 +147,7 @@ def git_ref_exists(ref):
 
 
 def git_remote_branch_exists(remote_and_branch):
-    return git("show-ref --verify --quiet refs/remotes/%s" % remote_and_branch, check=False).returncode == 0
+    return git(f"show-ref --verify --quiet refs/remotes/{remote_and_branch}", check=False).returncode == 0
 
 
 def git_init(branch, directory):
@@ -171,7 +171,7 @@ def git_root_or_die():
 # or None.
 def git_worktree_get_checkout_path(root, branch):
     state = dict()
-    out = git("-C %s worktree list --porcelain" % root).stdout.split("\n")
+    out = git(f"-C {root} worktree list --porcelain").stdout.split("\n")
     path = None
 
     for l in out:
@@ -197,7 +197,7 @@ def git_worktree_get_checkout_path(root, branch):
 # Get the git dir (aka .git) directory for the worktree related to
 # the @path. @path defaults to CWD
 def git_worktree_get_git_dir(path='.'):
-    return git("-C %s rev-parse --git-dir" % path).stdout.strip("\n")
+    return git(f"-C {path} rev-parse --git-dir").stdout.strip("\n")
 
 
 @contextmanager
@@ -235,7 +235,7 @@ def _parse_baseline_line(iterable):
 
 def get_baseline_from_branch(branch):
     try:
-        out = git("show %s:config --" % branch).stdout
+        out = git(f"show {branch}:config --").stdout
     except subprocess.CalledProcessError:
         fatal(f"'{branch}' doesn't look like a valid ref for pile branch: config file not found")
     return _parse_baseline_line(out.splitlines())
@@ -248,8 +248,8 @@ def get_baseline(d):
 
 def update_baseline(d, commit):
     with open(op.join(d, "config"), "w") as f:
-        rev = git("rev-parse %s" % commit).stdout.strip()
-        f.write("BASELINE=%s" % rev)
+        rev = git(f"rev-parse {commit}").stdout.strip()
+        f.write(f"BASELINE={rev}")
 
 
 def update_series(d, series_list):
@@ -275,7 +275,7 @@ def get_branch_from_remote_branch(remote_branch):
 
 def assert_valid_pile_branch(pile):
     # --full-tree is necessary so we don't need "-C gitroot"
-    out = git("ls-tree -r --name-only --full-tree %s" % pile).stdout
+    out = git(f"ls-tree -r --name-only --full-tree {pile}").stdout
     has_config = False
     has_series = False
     non_patches = False
@@ -299,17 +299,17 @@ def assert_valid_pile_branch(pile):
 
 def assert_valid_result_branch(result_branch, baseline):
     try:
-        git("rev-parse %s" % baseline, stderr=nul_f)
+        git(f"rev-parse {baseline}", stderr=nul_f)
     except subprocess.CalledProcessError:
-        fatal("invalid baseline commit %s" % baseline)
+        fatal(f"invalid baseline commit {baseline}")
 
     try:
-        out = git("merge-base %s %s" % (baseline, result_branch)).stdout.strip()
+        out = git(f"merge-base {baseline} {result_branch}").stdout.strip()
     except subprocess.CalledProcessError:
         out = None
 
     if out != baseline:
-        fatal("branch '%s' does not contain baseline %s" % (result_branch, baseline))
+        fatal(f"branch '{result_branch}' does not contain baseline {baseline}")
 
 
 # Create a temporary directory to checkout a detached branch with git-worktree
@@ -324,38 +324,38 @@ def temporary_worktree(commit, dir, prefix="git-pile-worktree"):
 
     try:
         with tempfile.TemporaryDirectory(dir=dir, prefix=prefix) as d:
-            git("worktree add --detach --checkout %s %s" % (d, commit),
+            git(f"worktree add --detach --checkout {d} {commit}",
                 stdout=nul_f, stderr=nul_f)
             yield d
     finally:
-        git("worktree remove %s" % d)
+        git(f"worktree remove {d}")
 
 
 def cmd_init(args):
     assert_required_tools()
 
     try:
-        base_commit = git("rev-parse %s" % args.baseline, stderr=nul_f).stdout.strip()
+        base_commit = git(f"rev-parse {args.baseline}", stderr=nul_f).stdout.strip()
     except subprocess.CalledProcessError:
-        fatal("invalid baseline commit %s" % args.baseline)
+        fatal(f"invalid baseline commit {args.baseline}")
 
     path = git_worktree_get_checkout_path(git_root_or_die(), args.pile_branch)
     if path:
-        fatal("branch '%s' is already checked out at '%s'" % (args.pile_branch, path))
+        fatal(f"branch '{args.pile_branch}' is already checked out at '{path}'")
 
     if (op.exists(args.dir)):
-        fatal("'%s' already exists" % args.dir)
+        fatal(f"'{args.dir}' already exists")
 
     oldconfig = Config()
 
-    git("config pile.dir %s" % args.dir)
-    git("config pile.pile-branch %s" % args.pile_branch)
-    git("config pile.result-branch %s" % args.result_branch)
+    git(f"config pile.dir {args.dir}")
+    git(f"config pile.pile-branch {args.pile_branch}")
+    git(f"config pile.result-branch {args.result_branch}")
 
     config = Config()
 
     if not git_branch_exists(config.pile_branch):
-        info("Creating branch %s" % config.pile_branch)
+        info(f"Creating branch {config.pile_branch}")
 
         # Create an orphan branch named `config.pile_branch` at the
         # `config.dir` location. Unfortunately git-branch can't do that;
@@ -367,27 +367,27 @@ def cmd_init(args):
         with tempfile.TemporaryDirectory() as d:
             git_init("pile", d)
             update_baseline(d, base_commit)
-            git("-C %s add -A" % d)
+            git(f"-C {d} add -A")
             git(["-C", d, "commit", "-m", "Initial git-pile configuration"])
 
             # Temporary repository created, now let's fetch and create our branch
-            git("fetch %s pile:%s" % (d, config.pile_branch), stdout=nul_f, stderr=nul_f)
+            git(f"fetch {d} pile:{config.pile_branch}", stdout=nul_f, stderr=nul_f)
 
 
     # checkout pile branch as a new worktree
     try:
-        git("worktree add --checkout %s %s" % (config.dir, config.pile_branch),
+        git(f"worktree add --checkout {config.dir} {config.pile_branch}",
             stdout=nul_f, stderr=nul_f)
     except:
         config.revert(oldconfig)
-        fatal("failed to checkout worktree at %s" % config.dir)
+        fatal(f"failed to checkout worktree at {config.dir}")
 
     if oldconfig.is_valid():
-        info("Reinitialized existing git-pile's branch '%s' in '%s/'" %
-             (config.pile_branch, config.dir), color=False)
+        info(f"Reinitialized existing git-pile's branch '{config.pile_branch}' in '{config.dir}/'",
+             color=False)
     else:
-        info("Initialized empty git-pile's branch '%s' in '%s/'" %
-             (config.pile_branch, config.dir), color=False)
+        info(f"Initialized empty git-pile's branch '{config.pile_branch}' in '{config.dir}/'",
+             color=False)
 
     return 0
 
@@ -402,37 +402,37 @@ def cmd_setup(args):
         local_pile_branch = get_branch_from_remote_branch(args.pile_branch)
         if git_branch_exists(local_pile_branch):
             # allow case that e.g. 'origin/pile' and 'pile' point to the same commit
-            if git("rev-parse %s" % args.pile_branch).stdout == git("rev-parse %s" % local_pile_branch).stdout:
+            if git(f"rev-parse {args.pile_branch}").stdout == git(f"rev-parse {local_pile_branch}").stdout:
                 create_pile_branch = False
             elif not args.force:
-                fatal("using '%s' for pile but branch '%s' already exists and point elsewhere" % (args.pile_branch, local_pile_branch))
+                fatal(f"using '{args.pile_branch}' for pile but branch '{local_pile_branch}' already exists and point elsewhere")
     elif git_branch_exists(args.pile_branch):
         local_pile_branch = args.pile_branch
         create_pile_branch = False
     else:
-        fatal("Branch '%s' does not exist neither as local or remote branch" % args.pile_branch)
+        fatal(f"Branch '{args.pile_branch}' does not exist neither as local or remote branch")
 
     # optional arg: use current branch that is checked out in git_root_or_die()
     gitroot = git_root_or_die()
     try:
-        result_branch = args.result_branch if args.result_branch else git('-C %s symbolic-ref --short -q HEAD' % gitroot).stdout.strip()
+        result_branch = args.result_branch if args.result_branch else git(f'-C {gitroot} symbolic-ref --short -q HEAD').stdout.strip()
     except subprocess.CalledProcessError:
-        fatal("no argument passed for result branch and no branch is currently checkout at '%s'" % gitroot)
+        fatal(f"no argument passed for result branch and no branch is currently checkout at '{gitroot}'")
 
     # same as for pile branch but allow for non-existent result branch, we will just create one
     if git_remote_branch_exists(result_branch):
         local_result_branch = get_branch_from_remote_branch(result_branch)
         if git_branch_exists(local_result_branch):
             # allow case that e.g. 'origin/internal' and 'internal' point to the same commit
-            if git("rev-parse %s" % result_branch).stdout == git("rev-parse %s" % local_result_branch).stdout:
+            if git(f"rev-parse {result_branch}").stdout == git(f"rev-parse {local_result_branch}").stdout:
                 create_result_branch = False
             elif not args.force:
-                fatal("using '%s' for result but branch '%s' already exists and point elsewhere" % (result_branch, local_result_branch))
+                fatal(f"using '{result_branch}' for result but branch '{local_result_branch}' already exists and point elsewhere")
     elif git_branch_exists(result_branch):
         local_result_branch = result_branch
         create_result_branch = False
     else:
-        local_result_branch = git('-C %s symbolic-ref --short -q HEAD' % gitroot).stdout.strip()
+        local_result_branch = git(f'-C {gitroot} symbolic-ref --short -q HEAD').stdout.strip()
         create_result_branch = False
 
     # content of the pile branch looks like a pile branch?
@@ -448,59 +448,56 @@ def cmd_setup(args):
         # if pile branch is already checked out, it must be in the same
         # patchesdir on where we are trying to configure.
         if path != patchesdir:
-            fatal("branch '%s' is already checked out at '%s'"
-                  % (local_pile_branch, path))
+            fatal(f"branch '{local_pile_branch}' is already checked out at '{path}'")
         need_worktree = False
     else:
         # no checkout of pile branch. One more sanity check: the dir doesn't
         # exist yet, otherwise we could clutter whatever the user has there.
         if (op.exists(patchesdir)):
-            fatal("'%s' already exists" % args.dir)
+            fatal(f"'{args.dir}' already exists")
         need_worktree = True
 
     path = git_worktree_get_checkout_path(gitroot, local_result_branch)
     if path and path != gitroot:
-        fatal("branch '%s' is already checked out at '%s'"
-              % (local_result_branch, path))
+        fatal(f"branch '{local_result_branch}' is already checked out at '{path}'")
 
     force_arg = "-f" if args.force else ""
     # Yay, it looks like all sanity checks passed and we are not being
     # fuzzy-tested, try to do the useful work
     if create_pile_branch:
-        info("Creating branch %s" % local_pile_branch)
-        git("branch %s -t %s %s" % (force_arg, local_pile_branch, args.pile_branch))
+        info(f"Creating branch {local_pile_branch}")
+        git(f"branch {force_arg} -t {local_pile_branch} {args.pile_branch}")
     if create_result_branch:
-        info("Creating branch %s" % local_result_branch)
+        info(f"Creating branch {local_result_branch}")
         if not path:
-            git("branch %s -t %s %s" % (force_arg, local_result_branch, result_branch))
+            git(f"branch {force_arg} -t {local_result_branch} {result_branch}")
         else:
-            git("-C %s reset --hard %s" % (path, result_branch), stdout=nul_f, stderr=nul_f)
+            git(f"-C {path} reset --hard {result_branch}", stdout=nul_f, stderr=nul_f)
 
 
     if need_worktree:
         # checkout pile branch as a new worktree
         try:
-            git("-C %s worktree add --checkout %s %s" % (gitroot, args.dir, local_pile_branch),
+            git(f"-C {gitroot} worktree add --checkout {args.dir} {local_pile_branch}",
                 stdout=nul_f, stderr=nul_f)
         except:
-            fatal("failed to checkout worktree for '%s' at %s" % (local_pile_branch, args.dir))
+            fatal(f"failed to checkout worktree for '{local_pile_branch}' at {args.dir}")
 
     # write down configuration
-    git("config pile.dir %s" % args.dir)
-    git("config pile.pile-branch %s" % local_pile_branch)
-    git("config pile.result-branch %s" % local_result_branch)
+    git(f"config pile.dir {args.dir}")
+    git(f"config pile.pile-branch {local_pile_branch}")
+    git(f"config pile.result-branch {local_result_branch}")
 
     tracked_pile = git("rev-parse --abbrev-ref %s@{u}" % local_pile_branch,
                        check=False).stdout
     if tracked_pile:
-        tracked_pile = " (tracking %s)" % tracked_pile.strip()
+        tracked_pile = f" (tracking {tracked_pile.strip()})"
     tracked_result = git("rev-parse --abbrev-ref %s@{u}" % local_result_branch,
                          check=False).stdout
     if tracked_result:
-        tracked_result = " (tracking %s)" % tracked_result.strip()
+        tracked_result = f" (tracking {tracked_result.strip()})"
 
-    info("Pile branch '%s'%s setup successfully to generate branch '%s'%s" %
-         (local_pile_branch, tracked_pile, local_result_branch, tracked_result),
+    info(f"Pile branch '{local_pile_branch}'{tracked_pile} setup successfully to generate branch '{local_result_branch}'{tracked_result}",
          color=False)
 
     return 0
@@ -519,7 +516,7 @@ def fix_duplicate_patch_names(patches):
         retry = 2
         while newp in ret:
             if retry > max_retries:
-                raise Exception("wat!?! '%s' (max_retries=%d)" % (p, max_retries))
+                raise Exception(f"wat!?! '{p}' (max_retries={max_retries})")
             newp = p + "-%d" % retry
             retry += 1
 
@@ -538,7 +535,7 @@ def generate_series_list(commit_range, suffix):
     series = [x[0:52] for x in series]
     series = fix_duplicate_patch_names(series)
     # add 0001 and .patch prefix/suffix
-    series = ["0001-{name}{suffix}".format(name=x, suffix=suffix) for x in series]
+    series = [f"0001-{x}{suffix}" for x in series]
 
     return series if not single_arg else series[0]
 
@@ -551,7 +548,7 @@ def rm_patches(dest):
         try:
             os.remove(entry.path)
         except PermissionError:
-            fatal("Could not remove %s: permission denied" % entry.path)
+            fatal(f"Could not remove {entry.path}: permission denied")
 
 
 def has_patches(dest):
@@ -571,79 +568,78 @@ def parse_commit_range(commit_range, pile_dir, default_end):
     if not commit_range:
         baseline = get_baseline(pile_dir)
         if not baseline:
-            fatal("no BASELINE configured in %s" % pile_dir)
+            fatal(f"no BASELINE configured in {pile_dir}")
         return baseline, default_end
 
     range = commit_range.split("..")
     if len(range) == 1:
         range.append("HEAD")
     elif range[0] == "":
-        fatal("Invalid commit range '%s'" % commit_range)
+        fatal(f"Invalid commit range '{commit_range}'")
     elif range[1] == "":
         range[1] = "HEAD"
     base, result = range
     # sanity checks
     try:
-        git("rev-parse %s" % base, stderr=nul_f, stdout=nul_f)
-        git("rev-parse %s" % result, stderr=nul_f, stdout=nul_f)
+        git(f"rev-parse {base}", stderr=nul_f, stdout=nul_f)
+        git(f"rev-parse {result}", stderr=nul_f, stdout=nul_f)
     except (ValueError, subprocess.CalledProcessError):
-        fatal("Invalid commit range: %s" % commit_range)
+        fatal(f"Invalid commit range: {commit_range}")
 
     return base, result
 
 
 def copy_sanitized_patch(p, pnew):
-    with open(p, "r") as oldf:
-        with open(pnew, "w") as newf:
-            it = iter(oldf)
+    with open(p, "r") as oldf, open(pnew, "w") as newf:
+        it = iter(oldf)
 
-            # everything before the diff is allowed
+        # everything before the diff is allowed
+        for l in it:
+            newf.write(l)
+            if l == "---\n":
+                break
+        else:
+            fatal(f"malformed patch {p}\n")
+
+        # any additional patch context (like stat) is allowed
+        for l in it:
+            newf.write(l)
+            if l.startswith("diff --git"):
+                break
+        else:
+            fatal(f"malformed patch {p}\n")
+
+
+        while True:
+            # hunk header: everything but "index lines" are allowed,
+            # except if we are in a binary patch: in that case the
+            # index must be maintained otherwise it's not possible to
+            # reconstruct the branch
+            hunk_header = []
+            index_line = -1
+            is_binary = False
             for l in it:
-                newf.write(l)
-                if l == "---\n":
+                hunk_header.append(l)
+                if l.startswith("@@"):
                     break
-            else:
-                fatal("malformed patch %s\n" % p)
+                if l.startswith("GIT binary patch"):
+                    is_binary = True
+                    break
+                if l.startswith("index"):
+                    index_line = len(hunk_header) - 1
 
-            # any additional patch context (like stat) is allowed
+            if not is_binary and index_line >= 0:
+                hunk_header.pop(index_line)
+
+            newf.writelines(hunk_header)
+
             for l in it:
                 newf.write(l)
                 if l.startswith("diff --git"):
                     break
             else:
-                fatal("malformed patch %s\n" % p)
-
-
-            while True:
-                # hunk header: everything but "index lines" are allowed,
-                # except if we are in a binary patch: in that case the
-                # index must be maintained otherwise it's not possible to
-                # reconstruct the branch
-                hunk_header = []
-                index_line = -1
-                is_binary = False
-                for l in it:
-                    hunk_header.append(l)
-                    if l.startswith("@@"):
-                        break
-                    if l.startswith("GIT binary patch"):
-                        is_binary = True
-                        break
-                    if l.startswith("index"):
-                        index_line = len(hunk_header) - 1
-
-                if not is_binary and index_line >= 0:
-                    hunk_header.pop(index_line)
-
-                newf.writelines(hunk_header)
-
-                for l in it:
-                    newf.write(l)
-                    if l.startswith("diff --git"):
-                        break
-                else:
-                    # EOF, break outer loop
-                    break
+                # EOF, break outer loop
+                break
 
 
 # pre-existent patches are removed, all patches written from commit_range,
@@ -660,10 +656,10 @@ def genpatches(output, base_commit, result_commit):
     # 4) To avoid filename clashes due to (3), check for each patch if a file
     #    already exists and workaround it
 
-    commit_range = "%s..%s" % (base_commit, result_commit)
-    commit_list = git("rev-list --reverse %s" % commit_range).stdout.strip().split('\n')
+    commit_range = f"{base_commit}..{result_commit}"
+    commit_list = git(f"rev-list --reverse {commit_range}").stdout.strip().split('\n')
     if not commit_list:
-        fatal("No commits in range %s" % commit_range)
+        fatal(f"No commits in range {commit_range}")
 
     series = generate_series_list(commit_range, ".patch")
 
@@ -722,13 +718,15 @@ def gen_cover_letter(diff, output_dir, reroll_count_str, n_patches, baseline, pi
     # 1:  34cf518f0aab ! 1:  3a4e12046539 <commit message>
     # Let only the lines with state == !, < or >
     reduced_range_diff = "\n".join(list(filter(lambda x: x and x.split(maxsplit=3)[2] in "!><", range_diff_commits)))
-
     zero_fill = int(log10_or_zero(n_patches)) + 1
+    if add_header:
+        add_header = f"\n{add_header}"
+
     with open(cover_path, "w") as f:
-        f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+        f.write(f"""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
-Date: {date}
-Subject: [{subject_prefix} {zeroes}/{n_patches}] {subject}
+Date: {now}
+Subject: [{subject_prefix} {'0'.zfill(zero_fill)}/{n_patches}] {subject}
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit{add_header}
@@ -738,13 +736,9 @@ Content-Transfer-Encoding: 8bit{add_header}
 baseline: {baseline}
 pile-commit: {pile_commit}
 range-diff:
-{range_diff}
+{reduced_range_diff}
 
-""".format(user=user, email=email, date=now, zeroes="0".zfill(zero_fill),
-           n_patches=n_patches, baseline=baseline, pile_commit=pile_commit, subject_prefix=subject_prefix,
-           range_diff=reduced_range_diff, add_header="\n" + add_header if add_header else "",
-           subject=subject, body=body))
-
+""")
         for l in diff:
             f.write(l)
 
@@ -766,10 +760,13 @@ def gen_full_tree_patch(output_dir, reroll_count_str, n_patches, oldbaseline, ne
        full_tree_patch_fn = f"{reroll_count_str}-{full_tree_patch_fn}"
     full_tree_patch_path = op.join(output_dir, full_tree_patch_fn)
 
+    if add_header:
+        add_header = f"\n{add_header}"
+
     with open(full_tree_patch_path, "w") as f:
-        f.write("""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+        f.write(f"""From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: {user} <{email}>
-Date: {date}
+Date: {now}
 Subject: [{subject_prefix} {n_patches}/{n_patches}] REVIEW: Full tree diff against {oldref}
 MIME-Version: 1.0
 Content-Type: text/x-patch; charset=UTF-8
@@ -777,15 +774,13 @@ Content-Transfer-Encoding: 8bit{add_header}
 
 Auto-generated diff between {oldref}..{newref}
 ---
-""".format(user=user, email=email, date=now, oldref=oldref, newref=newref,
-           subject_prefix=subject_prefix, n_patches = n_patches,
-           add_header="\n" + add_header if add_header else ""))
+""")
 
         f.flush()
-        git("diff --stat -p --no-ext-diff {oldref}..{newref}".format(oldref=oldref, newref=newref), stdout=f)
+        git(f"diff --stat -p --no-ext-diff {oldref}..{newref}", stdout=f)
         f.flush()
 
-        f.write("--\ngit-pile {version}\n\n".format(version=__version__))
+        f.write(f"--\ngit-pile {__version__}\n\n")
 
     print(full_tree_patch_path)
 
@@ -808,31 +803,28 @@ def gen_individual_patches(output_dir, reroll_count_str, n_patches, subject_pref
 
             # Copy patches to the final output direcory fixing the Subject
             # lines to conform with the patch order and prefix
-            with open(old, "r") as oldf:
-                with open(new, "w") as newf:
-                    # parse header
-                    subject_header = "Subject: [PATCH] "
-                    for l in oldf:
-                        if l == "\n":
-                            # header end, give up, don't try to parse the body
-                            fatal("patch '%s' missing subject?" % old)
-                        if not l.startswith(subject_header):
-                            # header line != subject, just copy it
-                            newf.write(l)
-                            continue
+            with open(old, "r") as oldf, open(new, "w") as newf:
+                # parse header
+                subject_header = "Subject: [PATCH] "
+                for l in oldf:
+                    if l == "\n":
+                        # header end, give up, don't try to parse the body
+                        fatal(f"patch '{old}' missing subject?")
+                    if not l.startswith(subject_header):
+                        # header line != subject, just copy it
+                        newf.write(l)
+                        continue
 
-                        # found the subject, re-format it
-                        title = l[len(subject_header):]
-                        newf.write("Subject: [{subject_prefix} {i}/{n_patches}] {title}".format(
-                                   subject_prefix=subject_prefix, i=str(i + 1).zfill(zero_fill),
-                                   n_patches=n_patches,
-                                   title=title))
-                        break
-                    else:
-                        fatal("patch '%s' missing subject?" % old)
+                    # found the subject, re-format it
+                    title = l[len(subject_header):]
+                    num = str(i + 1).zfill(zero_fill)
+                    newf.write(f"Subject: [{subject_prefix} {num}/{n_patches}] {title}")
+                    break
+                else:
+                    fatal(f"patch '{old}' missing subject?")
 
-                    # write all the other lines after Subject header at once
-                    newf.writelines(oldf.readlines())
+                # write all the other lines after Subject header at once
+                newf.writelines(oldf.readlines())
 
             print(new)
             patches.append(new)
@@ -859,22 +851,22 @@ def cmd_genpatches(args):
 
         output = args.output_directory
         if has_patches(output) and not args.force:
-            fatal("'%s' is not default output directory and has patches in it.\n"
-                  "Force with --force or pass an empty/non-existent directory" % output)
+            fatal(f"'{output}' is not default output directory and has patches in it.\n"
+                  "Force with --force or pass an empty/non-existent directory")
     else:
         output = patchesdir
 
     genpatches(output, base, result)
 
     if commit_result:
-        git("-C %s add series config *.patch" % output)
+        git(f"-C {output} add series config *.patch")
         commit_cmd = ["-C", output,  "commit"]
         if args.message:
             commit_cmd += ["-m", args.message]
 
         print(args.message)
         if git(commit_cmd, check=False, capture=False, stdout=None, stderr=None).returncode != 0:
-            fatal("patches generated at '%s', but git-commit failed. Leaving result in place." % output)
+            fatal(f"patches generated at '{output}', but git-commit failed. Leaving result in place.")
 
     return 0
 
@@ -910,7 +902,7 @@ class PileCover:
 
         m = email.message_from_binary_file(f)
         if not m:
-            error("No patches in '%s'" % fname if fname else "stdin")
+            error(f'No patches in \'{fname if fname else "stdin"}\'')
             return None
 
         body_list = m.get_payload(decode=True).decode().splitlines()
@@ -953,14 +945,14 @@ class PileCover:
                 warn("Unknown pile information on cover letter:", elems[0])
 
         if not baseline or not pile_commit:
-            error("Failed to find pile information in cover letter (baseline=%s, pile_commit=%s)" % (baseline, pile_commit))
+            error(f"Failed to find pile information in cover letter (baseline={baseline}, pile_commit={pile_commit})")
             return None
 
         return PileCover(m, version, baseline, pile_commit)
 
     def dump(self, f):
         from_str = self.m.get_unixfrom() or "0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001"
-        f.write("From %s\n" % from_str)
+        f.write(f"From {from_str}\n")
 
         for k, v in zip(self.m.keys(), self.m.values()):
             if k.lower() == "subject" or k.lower() == "from":
@@ -977,7 +969,7 @@ class PileCover:
                     else:
                             vfinal = vfinal + v
                 v = vfinal
-            print("%s: %s" % (k, v), file=f)
+            print(f"{k}: {v}", file=f)
 
         f.write("\n")
         f.write(self.m.get_payload(decode=False))
@@ -1068,14 +1060,14 @@ def cmd_am(args):
     if not sys.stdin.isatty() and sys.stdout.isatty():
         sys.stdin = open('/dev/tty')
 
-    info("Entering '%s' directory" % config.dir)
+    info(f"Entering '{config.dir}' directory")
     gitdir = git_worktree_get_git_dir(patchesdir)
     if op.isdir(op.join(gitdir, "rebase-apply")):
         fatal(f"Already on am or rebase operation in worktree {patchesdir}", file=sys.stderr)
 
     if args.strategy == "pile-commit":
         if git(["-C", patchesdir, "reset", "--hard", cover.pile_commit], check=False).returncode != 0:
-            print("Could not checkout commit %s\n as baseline - you probably need to git-fetch it." % cover.pile_commit,
+            print(f"Could not checkout commit {cover.pile_commit}\n as baseline - you probably need to git-fetch it.",
                   file=sys.stderr)
 
     with subprocess.Popen(["git", "-C", patchesdir, "am", "-3", "--whitespace=nowarn"],
@@ -1089,32 +1081,33 @@ def cmd_am(args):
             proc.returncode = 0
 
     if proc.returncode != 0:
-        fatal("""git-pile am failed, you will need to continue manually.
+        fatal(f"""git-pile am failed, you will need to continue manually.
 
-The '%s' directory is in branch '%s' in the middle of patching the series. You
+The '{config.dir}' directory is in branch '{config.pile_branch}' in the middle of patching the series. You
 need to fix the conflicts, add the files and finalize with:
 
     git am --continue
 
-Good luck! ¯\_(ツ)_/¯"""  % (config.dir, config.pile_branch))
+Good luck! ¯\_(ツ)_/¯""")
 
     if args.genbranch:
-        info("Generating branch '%s'" % config.result_branch)
+        info(f"Generating branch '{config.result_branch}'")
         genbranch_args = parse_args(["genbranch", "--force"])
         return cmd_genbranch(genbranch_args)
 
     return 0
 
+
 def check_baseline_exists(baseline):
     ret = git_can_fail("cat-file -e {baseline}".format(baseline=baseline))
     if ret.returncode != 0:
-        fatal("""baseline commit '%s' not found!
+        fatal(f"""baseline commit '{baseline}' not found!
 
 If the baseline tree has been force-pushed, the old baseline commits
 might have been pruned from the local repository. If the baselines are
 stored in the remote, they can be downloaded again with git fetch by
 specifying the relevant refspec, either one-off directly in the command
-or permanently in the git configuration file of the local repo.""" % (baseline))
+or permanently in the git configuration file of the local repo.""")
 
 
 def git_ref_is_ancestor(ancestor, ref):
@@ -1123,13 +1116,13 @@ def git_ref_is_ancestor(ancestor, ref):
 
 def check_baseline_is_ancestor(baseline, ref):
     if not git_ref_is_ancestor(baseline, ref):
-        fatal("""baseline '%s' is not an ancestor of ref '%s'.
+        fatal(f"""baseline '{baseline}' is not an ancestor of ref '{ref}'.
 
 Note that the pile baseline is implicitly used when no baseline is specified,
 so this error commonly occurs when the pile is not updated when the working
 branch is and no baseline is specified. If a branch non based on the pile
 baseline is intentionally being used, a baseline must be specified as well.
-See the help of this command for extra details""" % (baseline, ref))
+See the help of this command for extra details""")
 
 
 # Parse refs from command line
@@ -1278,8 +1271,7 @@ option to this command.""")
         args.no_full_patch = True
 
     creation_factor = f"--creation-factor={args.creation_factor}" if args.creation_factor else ""
-    range_diff_commits = git("range-diff --no-color --no-patch {creation_factor} {oldbaseline}..{oldref} {newbaseline}..{newref}".format(
-            creation_factor=creation_factor, oldbaseline=oldbaseline, newbaseline=newbaseline, oldref=oldref, newref=newref)).stdout.split("\n")
+    range_diff_commits = git(f"range-diff --no-color --no-patch {creation_factor} {oldbaseline}..{oldref} {newbaseline}..{newref}").stdout.split("\n")
 
     c_commits, a_commits, d_commits, diff_filter_list = _parse_range_diff(range_diff_commits)
 
@@ -1302,8 +1294,7 @@ option to this command.""")
             diff = git(["-C", tmpdir, "diff", "--cached", "-p", "--stat", '-O', order_file.name, "--no-ext-diff", "--",
                         *diff_filter_list]).stdout
             if not diff:
-                fatal("Nothing changed from %s..%s to %s..%s"
-                        % (oldbaseline, config.result_branch, newbaseline, newref))
+                fatal(f"Nothing changed from {oldbaseline}..{config.result_branch} to {newbaseline}..{newref}")
 
     if not args.output_directory and config.format_output_directory:
         output = config.format_output_directory
@@ -1333,7 +1324,7 @@ option to this command.""")
 
     cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file, args.signoff)
     cover_path = gen_cover_letter(diff, output, reroll_count_str, n_patches, newbaseline,
-            git("rev-parse {ref}".format(ref=config.pile_branch)).stdout.strip(),
+            git(f"rev-parse {config.pile_branch}").stdout.strip(),
             subject_prefix, range_diff_commits, config.format_add_header,
             cover_subject, cover_body)
 
@@ -1459,9 +1450,9 @@ def _genbranch(root, patchesdir, config, args):
         if not args.branch:
             # use whatever is currently checked out, might as well be in
             # detached state
-            git("reset --hard %s" % baseline)
+            git(f"reset --hard {baseline}")
         else:
-            git("checkout -B %s %s" % (args.branch, baseline))
+            git(f"checkout -B {args.branch} {baseline}")
 
         any_fallback = False
 
@@ -1504,7 +1495,7 @@ pile patches.""")
         path = git_worktree_get_checkout_path(root, branch)
 
         if path and not args.force:
-            error("can't use branch '%s' because it is checked out at '%s'" % (branch, path))
+            error(f"can't use branch '{branch}' because it is checked out at '{path}'")
             return 1
 
         if patchlist:
@@ -1517,9 +1508,9 @@ pile patches.""")
 
         if path:
             # args.force checked earlier
-            git("-C %s reset --hard %s" % (path, head), stdout=nul_f, stderr=nul_f)
+            git(f"-C {path} reset --hard {head}", stdout=nul_f, stderr=nul_f)
         else:
-            git("-C %s checkout -f -B %s %s" % (d, branch, head), stdout=nul_f, stderr=nul_f)
+            git(f"-C {d} checkout -f -B {branch} {head}", stdout=nul_f, stderr=nul_f)
 
     return 0
 
@@ -1677,8 +1668,7 @@ def cmd_baseline(args):
         b_branch = get_baseline_from_branch(config.pile_branch)
 
         if b_dir != b_branch:
-            fatal("Pile branch '%s' has baseline %s, but directory is currently at %s"
-                  % (config.pile_branch, b_branch, b_dir))
+            fatal(f"Pile branch '{config.pile_branch}' has baseline {b_branch}, but directory is currently at {b_dir}")
     else:
         b_branch = get_baseline_from_branch(args.ref)
 
@@ -1703,13 +1693,13 @@ def cmd_destroy(args):
     rm_ = run_wrapper('rm', capture=True, check=False, print_error_as_ignored=True)
 
     if config.dir and op.exists(config.dir):
-        git_("worktree remove --force {d}".format(d=config.dir))
-        rm_("-rf {d}".format(d=config.dir))
+        git_(f"worktree remove --force {config.dir}")
+        rm_(f"-rf {config.dir}")
 
     git_("worktree prune")
 
     if config.pile_branch:
-        git_("branch -D {d}".format(d=config.pile_branch))
+        git_(f"branch -D {config.pile_branch}")
 
 
 def cmd_reset(args):
@@ -1728,15 +1718,14 @@ def cmd_reset(args):
 
     remote_pile = git_can_fail("rev-parse --abbrev-ref %s@{u}" % config.pile_branch).stdout.strip()
     if not remote_pile:
-        fatal("Branch %s doesn't have an upstream" % config.pile_branch)
+        fatal(f"Branch {config.pile_branch} doesn't have an upstream")
 
     if not args.pile_only:
         if args.inplace:
             branch_dir = os.getcwd()
             if branch_dir == pile_dir:
-                fatal("In-place reset can't reset both %s and %s branches to the same commit\n"
-                      "You are probably in the wrong directory for in-place reset."
-                      % (config.pile_branch, config.result_branch))
+                fatal(f"In-place reset can't reset both {config.pile_branch} and {config.result_branch} branches to the same commit\n"
+                      "You are probably in the wrong directory for in-place reset.")
 
             local_branch = git("rev-parse --abbrev-ref HEAD").stdout.strip()
             if local_branch == "HEAD":
@@ -1744,22 +1733,19 @@ def cmd_reset(args):
         else:
             branch_dir = git_worktree_get_checkout_path(gitroot, config.result_branch)
             if not branch_dir:
-                fatal("Could not find checkout of %s branch, refusing to reset.\nYou should probably inspect '%s'"
-                      % (config.result_branch, gitroot))
+                fatal(f"Could not find checkout of {config.result_branch} branch, refusing to reset.\nYou should probably inspect '{gitroot}'")
             local_branch = config.result_branch
 
         remote_branch = git_can_fail("rev-parse --abbrev-ref %s@{u}" % config.result_branch).stdout.strip()
         if not remote_branch:
-            fatal("Branch %s doesn't have an upstream" % config.result_branch)
+            fatal(f"Branch {config.result_branch} doesn't have an upstream")
 
     git(["-C", pile_dir, "reset", "--hard", remote_pile])
-    print("{local_branch:<20}-> {remote_branch:<20} {dir}".format(
-          local_branch=config.pile_branch, remote_branch=remote_pile, dir=pile_dir))
+    print(f"{config.pile_branch:<20}-> {remote_pile:<20} {pile_dir}")
 
     if not args.pile_only:
         git(["-C", branch_dir, "reset", "--hard", remote_branch])
-        print("{local_branch:<20}-> {remote_branch:<20} {dir}".format(
-              local_branch=local_branch, remote_branch=remote_branch, dir=branch_dir))
+        print(f"{local_branch:<20}-> {remote_branch:<20} {branch_dir}")
         print("Branches synchronized with their current remotes")
     else:
         print("\nHEAD is now at",  git(f"-C {pile_dir} log --oneline --abbrev-commit --no-decorate -1 HEAD").stdout.strip())
