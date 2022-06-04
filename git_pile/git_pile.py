@@ -1439,7 +1439,7 @@ option to this command."""
 
 def fallback_apply_reset():
     git("reset --hard HEAD")
-    status = git(f"status --porcelain").stdout.splitlines()
+    status = git("status --porcelain").stdout.splitlines()
 
     # remove any untracked file left by git-apply or patch (*.rej, *.orig)
     for l in status:
@@ -1467,7 +1467,7 @@ def git_am_apply_fallbacks(apply_cmd, args, stdout, stderr, env):
 
         # record previously untracked files so we don't add them later
         untracked_files = []
-        for l in git(f"status --porcelain").stdout.splitlines():
+        for l in git("status --porcelain").stdout.splitlines():
             if l[0] == "?" and l[1] == "?":
                 f = Path(l.split()[1])
                 untracked_files += []
@@ -1475,7 +1475,7 @@ def git_am_apply_fallbacks(apply_cmd, args, stdout, stderr, env):
         patch_can_fail = run_wrapper("patch", capture=True, check=False)
         ret = patch_can_fail(f"-p1 -i {cur_patch}", stdout=stdout, stderr=stderr, env=env, start_new_session=True)
         if ret.returncode == 0:
-            for l in git(f"status --porcelain").stdout.splitlines():
+            for l in git("status --porcelain").stdout.splitlines():
                 f = Path(l.split()[1])
                 if l[0] == "?" and l[1] == "?" and not f in untracked_files:
                     git(f"add {f}")
