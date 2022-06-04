@@ -12,15 +12,25 @@ import subprocess
 import sys
 import tempfile
 import timeit
-
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
-from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from time import strftime
 
-from .helpers import error, info, fatal, warn, log_enable_color
-from .helpers import run_wrapper, orderedset, open_or_stdin, prompt_yesno, pushdir
-from .helpers import set_debugging, set_fatal_behavior
 from . import __version__
+from .helpers import (
+    error,
+    fatal,
+    info,
+    log_enable_color,
+    open_or_stdin,
+    orderedset,
+    prompt_yesno,
+    pushdir,
+    run_wrapper,
+    set_debugging,
+    set_fatal_behavior,
+    warn,
+)
 
 try:
     import argcomplete
