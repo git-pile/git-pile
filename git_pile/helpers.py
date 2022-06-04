@@ -6,7 +6,6 @@ import shlex
 import subprocess
 import sys
 from contextlib import contextmanager
-from enum import Enum
 
 debug_run = False
 log_color = (False, True, True)
