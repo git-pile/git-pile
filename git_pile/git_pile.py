@@ -893,7 +893,7 @@ class PileCover:
         if l0.startswith(b'From '):
             f.write(l0)
         else:
-            f.write(b'From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001n\n')
+            f.write(b'From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001\n')
             f.write(l0)
 
         f.write(oldf.read())
