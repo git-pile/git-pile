@@ -60,7 +60,6 @@ class run_wrapper:
         self.check = check
         self.print_error_as_ignored = print_error_as_ignored
 
-
     def __call__(self, s, *args, **kwargs):
         capture = kwargs.pop("capture", self.capture)
         print_error_as_ignored = kwargs.pop("print_error_as_ignored", self.print_error_as_ignored)
@@ -85,9 +84,9 @@ class run_wrapper:
 
         l.insert(0, self.cmd)
 
-        cmd_debug = ' '.join(shlex.quote(x) for x in l)
+        cmd_debug = " ".join(shlex.quote(x) for x in l)
         if debug_run:
-            print('+ ' + cmd_debug, file=sys.stderr)
+            print("+ " + cmd_debug, file=sys.stderr)
 
         ret = subprocess.run(l, *args, **kwargs)
 
@@ -111,6 +110,7 @@ class subcmd:
 
 class FatalException(Exception):
     """Fatal exception, can't continue"""
+
     pass
 
 
@@ -125,7 +125,7 @@ COLOR_NONE = ""
 
 
 def print_color(color, prefix, s, *args, **kwargs):
-    sl = [ color + prefix, s, *args, COLOR_RESET ]
+    sl = [color + prefix, s, *args, COLOR_RESET]
     print(*sl, *args, **kwargs)
 
 
@@ -161,24 +161,24 @@ def orderedset(it):
 
 def prompt_yesno(question, default):
     if default is None:
-        choices = ' [y/n]: '
+        choices = " [y/n]: "
         default_reply = None
     elif not default:
-        choices = ' [y/N]: '
-        default_reply = 'n'
+        choices = " [y/N]: "
+        default_reply = "n"
     else:
-        choices = ' [Y/n]: '
-        default_reply = 'y'
+        choices = " [Y/n]: "
+        default_reply = "y"
 
     reply = None
     while reply is None:
         reply = str(input(question + choices)).lower().strip() or default_reply
 
-    if reply[0] == 'y':
+    if reply[0] == "y":
         return True
-    if reply[0] == 'n':
+    if reply[0] == "n":
         return False
-    
+
     return default
 
 
