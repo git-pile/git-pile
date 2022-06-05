@@ -62,3 +62,40 @@ jobs:
           python3 -m pip uninstall --yes git-pile
           export PATH=$PWD:$PATH
           git pile --version
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ '3.6', '3.7', '3.9', '3.10' ]
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v2
+        name: Set up Python
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes bats
+
+      - uses: actions/checkout@v3
+        with:
+          repository: bats-core/bats-core
+          ref: v1.7.0
+          path: test/bats-core
+      - run: test/bats-core/install.sh $HOME/.local
+
+      - name: Install git-pile
+        run: python3 -m pip install --user .
+
+      - name: Setup git
+        run: |
+          git config --global user.name "ci"
+          git config --global user.email "ci@git-pile.github.io"
+          git config --global init.defaultBranch master
+
+      - name: Run tests
+        run: bats --print-output-on-failure --show-output-of-passing-tests --tap -T test
