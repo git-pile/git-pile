@@ -15,7 +15,8 @@ README = (HERE / "README.md").read_text()
 if sys.version_info < (3, 6):
     sys.exit("Sorry, we need at least Python 3.6.x")
 
-if "install" in sys.argv and "--user" in sys.argv:
+# installing to user dir or inside virtualenv
+if ("install" in sys.argv and "--user" in sys.argv) or sys.base_prefix != sys.prefix:
     # this is not a standard location, the user still needs to source the file,
     # but at least it's installed somewhere we can document
     datadir = os.environ.get("XDG_DATA_HOME", op.join(op.expanduser("~"), ".local", "share"))
