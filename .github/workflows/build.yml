@@ -11,8 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        #python-version: [ '3.6', '3.7', '3.9', '3.10' ]
-        python-version: [ '3.7', '3.9', '3.10' ]
+        python-version: [ '3.6', '3.7', '3.9', '3.10' ]
     steps:
       - uses: actions/checkout@v3
 
@@ -46,13 +45,13 @@ jobs:
       - name: Test user installation
         run: |
           python3 -m pip install --user .
-          $HOME/.local/bin/git-pile -v
+          git-pile -v
           python3 -m pip uninstall --yes git-pile
 
       - name: Test editable user installation
         run: |
           python3 -m pip install --user --editable .
-          $HOME/.local/bin/git-pile -v
+          git-pile -v
 
       - name: Test git PATH integration
         run: |
