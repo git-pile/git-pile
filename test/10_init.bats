@@ -13,7 +13,15 @@ setup() {
 
 @test "init" {
   pushd "$BATS_TEST_TMPDIR/testrepo"
+
   git pile init -p pile -r internal
   [ -d patches ]
   [ "$(git rev-parse HEAD)" = "$(git pile baseline)" ]
+
+  # double init fails
+  run ! git pile init -p pile -r internal
+  git pile destroy
+
+  # init again passes
+  git pile init -p pile -r internal
 }
