@@ -1646,7 +1646,7 @@ def cmd_genlinear_branch(args):
         return 1
 
     root = git_root_or_die()
-    branch = config.linear_branch or args.branch
+    branch = args.branch or config.linear_branch
     if not branch:
         fatal("Branch not specified in command-line and not configured: use -b argument or configure in pile.linear-branch")
 
