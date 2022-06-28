@@ -1688,7 +1688,7 @@ def cmd_genlinear_branch(args):
 
             # avoid exit() from genbranch - we want to recover and continue
             set_fatal_behavior("raise")
-            genbranch_args = parse_args(["genbranch", "-i", "-q"])
+            genbranch_args = parse_args(["genbranch", "-i", "-q", "--no-fuzzy"])
 
             total_refs = len(refs)
 
