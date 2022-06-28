@@ -2092,6 +2092,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
     parser_genbranch.add_argument(
         "--fix-whitespace", help="Pass --whitespace=fix to git am to fix whitespace", action="store_true"
     )
+    parser_genbranch.add_argument("--no-fuzzy", action="store_false", dest="fuzzy", default=None)
     parser_genbranch.add_argument(
         "--fuzzy",
         help="Allow to fallback to patch application with conflict solving. "
