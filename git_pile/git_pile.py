@@ -1676,6 +1676,14 @@ def cmd_genlinear_branch(args):
 
             total_refs = len(refs)
 
+            pre_genbranch_exec = None
+            post_genbranch_exec = None
+            if args.pre_genbranch_exec:
+                pre_genbranch_exec = run_wrapper(args.pre_genbranch_exec, shell=True)
+            if args.post_genbranch_exec:
+                post_genbranch_exec = run_wrapper(args.post_genbranch_exec, shell=True)
+            hook_env = {**os.environ, "PILE_DIR": piledir, "RESULT_DIR": resultdir}
+
             for idx, rev in enumerate(refs):
                 git(f"-C {piledir} reset --hard {rev}")
                 info(f"Generating branch for {rev} ({idx + 1}/{total_refs}) ", end="")
@@ -1684,7 +1692,13 @@ def cmd_genlinear_branch(args):
 
                 try:
                     with redirect_stdout(nul_f), redirect_stderr(nul_f), pushdir(resultdir, root):
+                        if pre_genbranch_exec:
+                            pre_genbranch_exec("", env=hook_env)
+
                         _genbranch(root, piledir, config, genbranch_args)
+
+                        if post_genbranch_exec:
+                            post_genbranch_exec("", env=hook_env)
 
                         tree = next(
                             (x for x in git("cat-file commit HEAD").stdout.strip().splitlines() if x.startswith("tree")), None
@@ -2278,6 +2292,18 @@ shortcut. From more verbose to the easiest ones:
         action="store_false",
         dest="incremental",
         default=True,
+    )
+    parser_genlinear_branch.add_argument(
+        "--pre-genbranch-exec",
+        help="Shell command to execute just before generating the branch for each pile commit. "
+        "PILE_DIR and RESULT_DIR environment variables can be used to access those directories",
+        metavar="CMD",
+    )
+    parser_genlinear_branch.add_argument(
+        "--post-genbranch-exec",
+        help="Shell command to execute just after generating the branch for each pile commit. "
+        "PILE_DIR and RESULT_DIR environment variables can be used to access those directories",
+        metavar="CMD",
     )
     parser_genlinear_branch.set_defaults(func=cmd_genlinear_branch)
 
