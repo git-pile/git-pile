@@ -1618,16 +1618,19 @@ def cmd_genbranch(args):
 # - top_linear_ref is the the latest ref from the linearized branch if we have one
 # - refspec is something suitable to pass to rev-list/log to get the missing
 #   refs from pile branch
-def get_refs_from_linearized(incremental, pile_branch, linear_branch, notes_ref):
+def get_refs_from_linearized(incremental, pile_branch, start_ref, linear_branch, notes_ref):
+    if start_ref:
+        pile_range = f"{start_ref}^..{pile_branch}"
+
     if not incremental:
-        return None, pile_branch
+        return None, pile_range
 
     if not git_ref_exists(f"refs/notes/{linear_branch}"):
-        return None, pile_branch
+        return None, pile_range
 
     proc = git_can_fail(f"rev-list --no-merges {linear_branch}", stderr=nul_f)
     if proc.returncode or not proc.stdout:
-        return None, pile_branch
+        return None, pile_range
 
     refs = proc.stdout.strip().split("\n")
     key = "pile-commit: "
@@ -1635,9 +1638,16 @@ def get_refs_from_linearized(incremental, pile_branch, linear_branch, notes_ref)
         notes = git(f"log --notes={notes_ref} --format=%N -1 {ref}").stdout.strip().split("\n")
         for n in notes:
             if n.startswith(key):
-                return refs[0], f"{n[len(key):]}..{pile_branch}"
+                val = n[len(key) :]
 
-    return None, pile_branch
+                # ensure we are starting at a ref newer than the start point
+                if start_ref and not git_ref_is_ancestor(start_ref, val):
+                    error(f"Provided start-ref {start_ref} is not ancestor of commit in git-notes ({val})")
+                    return None, None
+
+                return refs[0], f"{val}..{pile_branch}"
+
+    return None, pile_range
 
 
 def cmd_genlinear_branch(args):
@@ -1646,13 +1656,19 @@ def cmd_genlinear_branch(args):
         return 1
 
     root = git_root_or_die()
-    branch = config.linear_branch or args.branch
+    branch = args.branch or config.linear_branch
     if not branch:
         fatal("Branch not specified in command-line and not configured: use -b argument or configure in pile.linear-branch")
 
     notes_ref = branch
 
-    parent_ref, pile_range = get_refs_from_linearized(args.incremental, config.pile_branch, branch, notes_ref)
+    if args.start_ref and not git_ref_is_ancestor(args.start_ref, config.pile_branch):
+        fatal(f"Provided start-ref ({args.start_ref}) is not ancestor of branch {config.pile_branch}")
+
+    parent_ref, pile_range = get_refs_from_linearized(args.incremental, config.pile_branch, args.start_ref, branch, notes_ref)
+    if not pile_range:
+        return 1
+
     refs = git(f"rev-list --no-merges --reverse {pile_range}").stdout.strip().splitlines()
     if not refs:
         info("Nothing to do.")
@@ -1672,9 +1688,17 @@ def cmd_genlinear_branch(args):
 
             # avoid exit() from genbranch - we want to recover and continue
             set_fatal_behavior("raise")
-            genbranch_args = parse_args(["genbranch", "-i", "-q"])
+            genbranch_args = parse_args(["genbranch", "-i", "-q", "--no-fuzzy"])
 
             total_refs = len(refs)
+
+            pre_genbranch_exec = None
+            post_genbranch_exec = None
+            if args.pre_genbranch_exec:
+                pre_genbranch_exec = run_wrapper(args.pre_genbranch_exec, shell=True)
+            if args.post_genbranch_exec:
+                post_genbranch_exec = run_wrapper(args.post_genbranch_exec, shell=True)
+            hook_env = {**os.environ, "PILE_DIR": piledir, "RESULT_DIR": resultdir}
 
             for idx, rev in enumerate(refs):
                 git(f"-C {piledir} reset --hard {rev}")
@@ -1684,7 +1708,13 @@ def cmd_genlinear_branch(args):
 
                 try:
                     with redirect_stdout(nul_f), redirect_stderr(nul_f), pushdir(resultdir, root):
+                        if pre_genbranch_exec:
+                            pre_genbranch_exec("", env=hook_env)
+
                         _genbranch(root, piledir, config, genbranch_args)
+
+                        if post_genbranch_exec:
+                            post_genbranch_exec("", env=hook_env)
 
                         tree = next(
                             (x for x in git("cat-file commit HEAD").stdout.strip().splitlines() if x.startswith("tree")), None
@@ -2062,6 +2092,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
     parser_genbranch.add_argument(
         "--fix-whitespace", help="Pass --whitespace=fix to git am to fix whitespace", action="store_true"
     )
+    parser_genbranch.add_argument("--no-fuzzy", action="store_false", dest="fuzzy", default=None)
     parser_genbranch.add_argument(
         "--fuzzy",
         help="Allow to fallback to patch application with conflict solving. "
@@ -2278,6 +2309,23 @@ shortcut. From more verbose to the easiest ones:
         action="store_false",
         dest="incremental",
         default=True,
+    )
+    parser_genlinear_branch.add_argument(
+        "--pre-genbranch-exec",
+        help="Shell command to execute just before generating the branch for each pile commit. "
+        "PILE_DIR and RESULT_DIR environment variables can be used to access those directories",
+        metavar="CMD",
+    )
+    parser_genlinear_branch.add_argument(
+        "--post-genbranch-exec",
+        help="Shell command to execute just after generating the branch for each pile commit. "
+        "PILE_DIR and RESULT_DIR environment variables can be used to access those directories",
+        metavar="CMD",
+    )
+    parser_genlinear_branch.add_argument(
+        "--start-ref",
+        help="Use this ref as the first one rather than walking the pile until its root",
+        metavar="REF",
     )
     parser_genlinear_branch.set_defaults(func=cmd_genlinear_branch)
 

@@ -40,13 +40,15 @@ def open_or_stdin(file, *args, **kwargs):
 
 
 class run_wrapper:
-    def __init__(self, cmd, env_default=None, capture=False, check=True, print_error_as_ignored=False):
+    def __init__(self, cmd, env_default=None, capture=False, check=True, print_error_as_ignored=False, shell=False):
         """
         Wrap @cmd into a cmd() function. If env_default is not None,
         cmd is considered to be an environment variable and if it's
         not set, the default value in env_default is used
         """
 
+        if shell:
+            val = cmd
         if env_default is not None:
             val = os.getenv(cmd, env_default)
         else:
@@ -56,6 +58,7 @@ class run_wrapper:
         self.capture = capture
         self.check = check
         self.print_error_as_ignored = print_error_as_ignored
+        self.shell = shell
 
     def __call__(self, s, *args, **kwargs):
         capture = kwargs.pop("capture", self.capture)
@@ -73,9 +76,12 @@ class run_wrapper:
                 kwargs["universal_newlines"] = True
 
         kwargs["check"] = kwargs.get("check", self.check)
+        kwargs["shell"] = kwargs.get("shell", self.shell)
 
         if isinstance(s, str):
             l = s.split()
+        elif not s:
+            l = []
         else:
             l = s
 
