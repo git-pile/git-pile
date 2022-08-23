@@ -1370,6 +1370,8 @@ option to this command."""
     else:
         output = args.output_directory
 
+    compose = config.format_compose if args.compose is None else args.compose
+
     os.makedirs(output or ".", exist_ok=True)
     rm_patches(output or ".")
 
@@ -1420,11 +1422,6 @@ option to this command."""
             subject_prefix,
             config.format_add_header,
         )
-
-    if args.compose is None:
-        compose = config.format_compose
-    else:
-        compose = args.compose
 
     if compose:
         editor = get_git_editor()
