@@ -2193,6 +2193,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
         metavar="FILE",
     )
     parser_format_patch.add_argument(
+        "-s",
         "--signoff",
         help="Add s-o-b to the cover letter, like git-merge --signoff or git-commit --signoff do",
         action="store_true",
