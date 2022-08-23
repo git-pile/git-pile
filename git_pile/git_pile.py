@@ -92,6 +92,7 @@ class Config:
         self.format_add_header = ""
         self.format_output_directory = ""
         self.format_compose = False
+        self.format_signoff = False
         self.genbranch_committer_date_is_author_date = True
         self.genbranch_user_name = None
         self.genbranch_user_email = None
@@ -1371,6 +1372,7 @@ option to this command."""
         output = args.output_directory
 
     compose = config.format_compose if args.compose is None else args.compose
+    signoff = config.format_signoff if args.signoff is None else args.signoff
 
     os.makedirs(output or ".", exist_ok=True)
     rm_patches(output or ".")
@@ -1393,7 +1395,7 @@ option to this command."""
     else:
         reroll_count_str = ""
 
-    cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file, args.signoff)
+    cover_subject, cover_body = get_cover_letter_message(args.commit_with_message, args.file, signoff)
     cover_path = gen_cover_letter(
         diff,
         output,
@@ -2189,12 +2191,13 @@ series  config  X'.patch  Y'.patch  Z'.patch
         help="Take the commit message from the given file. Use - to read the message from the standard input. Like documented in GIT-COMMIT(1)",
         metavar="FILE",
     )
+    parser_format_patch.add_argument("--no-signoff", action="store_false", dest="signoff", default=None)
     parser_format_patch.add_argument(
         "-s",
         "--signoff",
-        help="Add s-o-b to the cover letter, like git-merge --signoff or git-commit --signoff do",
+        help="Add s-o-b to the cover letter, like git-merge --signoff or git-commit --signoff do (default: format-signoff from config or False)",
         action="store_true",
-        default=False,
+        default=None,
     )
     parser_format_patch.add_argument(
         "--reroll-count",
