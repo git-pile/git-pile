@@ -86,12 +86,12 @@ def assert_required_tools():
 class Config:
     def __init__(self):
         self.dir = ""
+        self.linear_branch = ""
         self.result_branch = ""
         self.pile_branch = ""
         self.format_add_header = ""
         self.format_output_directory = ""
         self.format_compose = False
-        self.linear_branch = ""
         self.genbranch_committer_date_is_author_date = True
         self.genbranch_user_name = None
         self.genbranch_user_email = None
