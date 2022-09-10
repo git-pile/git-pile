@@ -748,7 +748,9 @@ def get_cover_letter_message(commit_with_message, file_with_message, signoff):
     if signoff:
         user = git("config --get user.name").stdout.strip()
         email = git("config --get user.email").stdout.strip()
-        body += f"\n\nSigned-off-by: {user} <{email}>"
+        signoff_str = f"Signed-off-by: {user} <{email}>"
+        if signoff_str not in body:
+            body += f"\n\n{signoff_str}"
 
     return subject, body
 
