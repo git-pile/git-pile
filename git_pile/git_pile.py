@@ -31,6 +31,7 @@ from .helpers import (
     set_fatal_behavior,
     warn,
 )
+from .pile import Pile, PileError
 
 try:
     import argcomplete
@@ -314,30 +315,6 @@ def get_branch_from_remote_branch(remote_branch):
     return None
 
 
-def assert_valid_pile_branch(pile):
-    # --full-tree is necessary so we don't need "-C gitroot"
-    out = git(f"ls-tree -r --name-only --full-tree {pile}").stdout
-    has_config = False
-    has_series = False
-    non_patches = False
-
-    for l in out.splitlines():
-        if l == "config":
-            has_config = True
-        elif l == "series":
-            has_series = True
-        elif not l.endswith(".patch") and not l.startswith(".") and op.dirname(l) != "":
-            non_patches = True
-
-    errorstr = "Branch '{pile}' does not look like a pile branch. No '{filename}' file found."
-    if not has_series:
-        fatal(errorstr.format(pile=pile, filename="series"))
-    if not has_config:
-        fatal(errorstr.format(pile=pile, filename="config"))
-    if non_patches:
-        warn("Branch '{pile}' has non-patch files".format(pile=pile))
-
-
 def assert_valid_result_branch(result_branch, baseline):
     try:
         git(f"rev-parse {baseline}", stderr=nul_f)
@@ -475,8 +452,13 @@ def cmd_setup(args):
         local_result_branch = git(f"-C {gitroot} symbolic-ref --short -q HEAD").stdout.strip()
         create_result_branch = False
 
-    # content of the pile branch looks like a pile branch?
-    assert_valid_pile_branch(args.pile_branch)
+    pile = Pile(rev=args.pile_branch)
+    try:
+        # structure of the pile branch looks like a pile branch?
+        pile.validate_structure()
+    except PileError as e:
+        fatal(f"Branch '{args.pile_branch}' does not look like a pile branch: {e}")
+
     baseline = get_baseline_from_branch(args.pile_branch)
 
     # sane result branch wrt baseline configured?
