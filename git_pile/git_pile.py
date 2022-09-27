@@ -267,27 +267,6 @@ def git_split_index(path="."):
             git(f"-C {path} config --unset splitIndex.sharedIndexExpire")
 
 
-def _parse_baseline_line(iterable):
-    for l in iterable:
-        if l.startswith("BASELINE="):
-            baseline = l[9:].strip()
-            return baseline
-    return None
-
-
-def get_baseline_from_branch(branch):
-    try:
-        out = git(f"show {branch}:config --").stdout
-    except subprocess.CalledProcessError:
-        fatal(f"'{branch}' doesn't look like a valid ref for pile branch: config file not found")
-    return _parse_baseline_line(out.splitlines())
-
-
-def get_baseline(d):
-    with open(op.join(d, "config"), "r") as f:
-        return _parse_baseline_line(f)
-
-
 def update_baseline(d, commit):
     with open(op.join(d, "config"), "w") as f:
         rev = git(f"rev-parse {commit}").stdout.strip()
@@ -459,10 +438,8 @@ def cmd_setup(args):
     except PileError as e:
         fatal(f"Branch '{args.pile_branch}' does not look like a pile branch: {e}")
 
-    baseline = get_baseline_from_branch(args.pile_branch)
-
     # sane result branch wrt baseline configured?
-    assert_valid_result_branch(result_branch, baseline)
+    assert_valid_result_branch(result_branch, pile.baseline())
 
     path = git_worktree_get_checkout_path(gitroot, local_pile_branch)
     patchesdir = op.join(gitroot, args.dir)
@@ -586,7 +563,7 @@ def has_patches(dest):
 
 def parse_commit_range(commit_range, pile_dir, default_end):
     if not commit_range:
-        baseline = get_baseline(pile_dir)
+        baseline = Pile(path=pile_dir).baseline()
         if not baseline:
             fatal(f"no BASELINE configured in {pile_dir}")
         return baseline, default_end
@@ -1319,8 +1296,9 @@ def cmd_format_patch(args):
 
     root = git_root_or_die()
     patchesdir = op.join(root, config.dir)
+    pile = Pile(path=patchesdir)
 
-    oldbaseline, newbaseline, oldref, newref = _parse_format_refs(args.refs, get_baseline(patchesdir))
+    oldbaseline, newbaseline, oldref, newref = _parse_format_refs(args.refs, pile.baseline())
     # make sure the specified baseline commits are part of the branches
     check_baseline_is_ancestor(oldbaseline, oldref)
     check_baseline_is_ancestor(newbaseline, newref)
@@ -1500,10 +1478,10 @@ def _genbranch(root, patchesdir, config, args):
     if not config.check_is_valid():
         return 1
 
-    baseline = args.baseline or get_baseline(patchesdir)
+    pile = Pile(path=patchesdir, baseline=args.baseline)
 
     # Make sure the baseline hasn't been pruned
-    check_baseline_exists(baseline)
+    check_baseline_exists(pile.baseline())
 
     try:
         patchlist = [
@@ -1548,9 +1526,9 @@ def _genbranch(root, patchesdir, config, args):
         if not args.branch:
             # use whatever is currently checked out, might as well be in
             # detached state
-            git(f"reset --hard {baseline}")
+            git(f"reset --hard {pile.baseline()}")
         else:
-            git(f"checkout -B {args.branch} {baseline}")
+            git(f"checkout -B {args.branch} {pile.baseline()}")
 
         any_fallback = False
 
@@ -1592,7 +1570,7 @@ pile patches."""
 
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
-    with temporary_worktree(baseline, root) as d:
+    with temporary_worktree(pile.baseline(), root) as d:
         branch = args.branch if args.branch else config.result_branch
         path = git_worktree_get_checkout_path(root, branch)
 
@@ -1692,7 +1670,7 @@ def cmd_genlinear_branch(args):
         # BASELINE from the first rev is a good guesstimate, but it may not
         # exist. In that case, just checkout anything, we are going to reset
         # to a new commit as the first thing anyway
-        commit = get_baseline(piledir) or refs[0]
+        commit = Pile(path=piledir).baseline() or refs[0]
         with temporary_worktree(commit, root) as resultdir:
             last_good_ref = None
             tree = "tree " + git(f"log --format=%T -1 {parent_ref}").stdout.strip() if parent_ref else None
@@ -1802,14 +1780,16 @@ def cmd_baseline(args):
 
     root = git_root_or_die()
     patchesdir = op.join(root, config.dir)
+    pile_from_dir = Pile(path=patchesdir)
+    pile_from_rev = Pile(rev=args.ref or config.pile_branch)
     if args.ref is None:
-        b_dir = get_baseline(patchesdir)
-        b_branch = get_baseline_from_branch(config.pile_branch)
+        b_dir = pile_from_dir.baseline()
+        b_branch = pile_from_rev.baseline()
 
         if b_dir != b_branch:
             fatal(f"Pile branch '{config.pile_branch}' has baseline {b_branch}, but directory is currently at {b_dir}")
     else:
-        b_branch = get_baseline_from_branch(args.ref)
+        b_branch = pile_from_rev.baseline()
 
     print(b_branch)
 

@@ -22,6 +22,7 @@ branch" will be used to refer to the required structure, abstracting away
 whether it comes from a git tree-ish object or directory in the file system.
 """
 import abc
+import collections
 import pathlib
 import subprocess
 
@@ -33,7 +34,7 @@ class Pile:
     Class responsible for representing the pile tree.
     """
 
-    def __init__(self, *, rev=None, path=None):
+    def __init__(self, *, rev=None, path=None, baseline=None):
         """
         Initialize the object from either a revision or a path in the file system.
 
@@ -46,6 +47,10 @@ class Pile:
         - If ``path`` is used, then it must point to a directory representing a
           checkout of the pile branch. The directory does not have to be tracked
           by git, but must match the structure of the pile branch.
+
+        The keyword ``baseline`` can be used to provide an alternative baseline
+        to be used. If not ``None``, it causes ``self.baseline()`` to always
+        return the passed value.
         """
         if rev and path:
             raise Exception("parameters path and rev are mutually exclusive")
@@ -56,6 +61,8 @@ class Pile:
         self.__rev = rev
         self.__path = path
         self.__reader = _RevReader(rev) if rev else _PathReader(path)
+        self.__config = None
+        self.__baseline_override = baseline
 
     def validate_structure(self, warn_non_patches=True):
         """
@@ -96,11 +103,50 @@ class Pile:
         if has_non_patches and warn_non_patches:
             helpers.warn(f"non-patch files found in {self.__loc_phrase()}")
 
+    def baseline(self):
+        """
+        Return the baseline for the pile.
+
+        This returns the sha1 for the baseline if found in the pile config,
+        otherwise ``None`` is returned.
+
+        Note that the baseline is cached for subsequent calls. If it is desired
+        to get the possibly refreshed value, it is necessary to call
+        ``self.read_config()`` to refresh the internal cache.
+        """
+        if self.__baseline_override is not None:
+            return self.__baseline_override
+        return self.__get_config().get("BASELINE")
+
+    def read_config(self):
+        """
+        Read the ``config`` file.
+
+        This method can be used to refresh any cached configuration data.
+        """
+        self.__get_config(refresh=True)
+
     def __loc_phrase(self):
         if self.__rev:
             return f"pile revision {self.__rev}"
         else:
             return f'pile directory "{self.__path}"'
+
+    def __get_config(self, refresh=False):
+        if self.__config is not None and not refresh:
+            return self.__config
+
+        data = {}
+        for i, line in enumerate(self.__reader.text("config").splitlines()):
+            name, equals, value = line.partition("=")
+            name = name.strip()
+            value = value.strip()
+            if "" in (name, equals, value):
+                raise PileError(f"invalid config at line {i + 1}: expecting string in the format <KEY>=<VALUE>")
+            data[name] = value
+
+        self.__config = data
+        return self.__config
 
 
 class PileError(Exception):
@@ -135,6 +181,15 @@ class _FileReader(abc.ABC):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
+    def text(self, *path):
+        """
+        Read and return the content of the file pointed by ``path`` as a string.
+
+        This must raise a FileNotFoundError if the file is not found.
+        """
+        raise NotImplementedError()
+
 
 class _PathReader(_FileReader):
     def __init__(self, path):
@@ -147,6 +202,9 @@ class _PathReader(_FileReader):
             else:
                 objecttype = "tree" if p.is_dir() else "blob"
                 yield p.name, objecttype
+
+    def text(self, *path):
+        return self.__path.joinpath(*path).read_text()
 
     def __filter_git_ignored(self, path_iter):
         try:
@@ -178,17 +236,63 @@ class _PathReader(_FileReader):
 class _RevReader(_FileReader):
     def __init__(self, rev):
         self.__rev = rev
+        # Leverage git revisions immutability to cache the result of ls-tree.
+        # This is specially useful when __ls_path() is called multiple times for
+        # different direct children of a very broad tree (e.g. a pile directory
+        # containing thousands of patches).
+        self.__ls_tree_cache = None
 
     def ls(self, include_type=False):
-        if include_type:
-            fmt = "%(objecttype) %(path)"
-        else:
-            fmt = "%(path)"
-        out = _git(["ls-tree", "-z", "--full-tree", f"--format={fmt}", self.__rev]).stdout
-
-        for entry in out.rstrip("\x00").split("\x00"):
+        for name, objecttype, _ in self.__ls_tree().values():
             if include_type:
-                objecttype, name = entry.split(" ", maxsplit=1)
                 yield name, objecttype
             else:
-                yield entry
+                yield name
+
+    def text(self, *path):
+        # `git show <rev>:<path>` does not provide a documented way of verifying
+        # that it failed because <path> does not exist under <rev>, so we need
+        # to call __ls_path() to ensure a FileNotFoundError is properly raised
+        # if necessary.
+        self.__ls_path(path)
+        gitpath = "/".join(path)
+        revspec = f"{self.__rev}:{gitpath}"
+        return _git(["show", revspec]).stdout
+
+    def __ls_path(self, path, fmt=""):
+        if len(path) == 1:
+            # Optimize for a direct child so as to which will used cached info
+            # if available.
+            info = self.__ls_tree()
+        else:
+            info = self.__ls_tree(path)
+        gitpath = "/".join(path)
+        try:
+            return info[gitpath]
+        except KeyError:
+            raise FileNotFoundError(f"path {gitpath!r} not found under revision {self.__rev}")
+
+    def __ls_tree(self, path=None):
+        if self.__ls_tree_cache is not None and path is None:
+            return self.__ls_tree_cache
+
+        cmd = [
+            "ls-tree",
+            "-z",
+            "--full-tree",
+            "--format=%(objectname) %(objecttype) %(path)",
+            self.__rev,
+        ]
+        if path is not None:
+            gitpath = "/".join(path)
+            cmd.append(gitpath)
+
+        info = collections.OrderedDict()
+        for entry in _git(cmd).stdout.rstrip("\x00").split("\x00"):
+            sha1, objecttype, name = entry.split(" ", maxsplit=2)
+            info[name] = name, objecttype, sha1
+
+        if path is None:
+            self.__ls_tree_cache = info
+
+        return info
