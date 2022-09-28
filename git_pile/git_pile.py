@@ -32,6 +32,7 @@ from .helpers import (
     warn,
 )
 from .pile import Pile, PileError
+from .genbranch_caching import GenbranchCache
 
 try:
     import argcomplete
@@ -98,6 +99,8 @@ class Config:
     __attr_doc_genbranch_committer_date_is_author_date = "(bool): Set committer date as the author date for generated patches. See --committer-date-is-author-date in GIT-COMMIT(1)"
     __attr_doc_genbranch_user_name = "(string): Name to use as committer when generating the commits"
     __attr_doc_genbranch_user_email = "(string): E-mail to use as committer when generating the commits"
+    __attr_doc_genbranch_use_cache = "(bool): Use cached information to avoid recreating commits"
+    __attr_doc_genbranch_cache_path = "(path): Path (relative to the .git dir) to the cache file for genbranch"
 
     def __init__(self):
         self.dir = ""
@@ -111,6 +114,8 @@ class Config:
         self.genbranch_committer_date_is_author_date = True
         self.genbranch_user_name = None
         self.genbranch_user_email = None
+        self.genbranch_use_cache = True
+        self.genbranch_cache_path = "pile-genbranch-cache.pickle"
 
         s = git(["config", "--get-regexp", "^pile\\.*"], check=False, stderr=nul_f).stdout.strip()
         if not s:
@@ -1490,19 +1495,56 @@ def _genbranch(root, patchesdir, config, args):
 
     if not args.dirty:
         apply_cmd = ["-c", "core.splitIndex=true", "am", "--no-3way", "--whitespace=warn"]
+        # Let's be conservative: any change in the default behavior of genbranch
+        # must cause caching to be disabled.
+        cache_not_allowed_reasons = []
+
         if config.genbranch_committer_date_is_author_date:
             apply_cmd.append("--committer-date-is-author-date")
+        else:
+            cache_not_allowed_reasons.append("config pile.genbranch-commiter-date-is-author-date is false")
+
         if args.fix_whitespace:
             apply_cmd.append("--whitespace=fix")
+            cache_not_allowed_reasons.append("using option --fix-whitespace")
 
         env = os.environ.copy()
         if config.genbranch_user_name:
             env["GIT_COMMITTER_NAME"] = config.genbranch_user_name
+
         if config.genbranch_user_email:
             env["GIT_COMMITTER_EMAIL"] = config.genbranch_user_email
+
+        cache_allowed = len(cache_not_allowed_reasons) == 0
+        if args.use_cache and not cache_allowed:
+            cache_not_allowed_reasons = "; ".join(cache_not_allowed_reasons)
+            warn(f"Caching disabled because of non-default genbranch operation: {cache_not_allowed_reasons}")
     else:
         env = None
         apply_cmd = ["apply", "--unsafe-paths", "-p1"]
+
+    if not args.dirty and args.use_cache and cache_allowed:
+        if not config.genbranch_cache_path:
+            fatal("Missing cache path (config value for pile.genbranch-cache-path is empty)")
+        cache_path = op.join(git_worktree_get_git_dir(), config.genbranch_cache_path)
+        committer_ident = git(["var", "GIT_COMMITTER_IDENT"], env=env).stdout
+        cache = GenbranchCache(cache_path, committer_ident=committer_ident)
+        # Use Pile from a revision if possible, so we do not calculate sha1 for
+        # each patch.
+        pile_for_cache = pile
+        try:
+            if git(["-C", patchesdir, "status", "--porcelain"], stderr=nul_f).stdout.strip() == "":
+                pile_rev = git(["-C", patchesdir, "rev-parse", "HEAD"]).stdout.strip()
+                pile_for_cache = Pile(rev=pile_rev, baseline=args.baseline)
+        except subprocess.CalledProcessError:
+            pass
+
+        effective_baseline, patchlist_offset = cache.search_best_base(pile_for_cache)
+        if patchlist_offset:
+            patchlist = patchlist[patchlist_offset:]
+    else:
+        effective_baseline = pile.baseline()
+        cache = None
 
     # "In-place mode" resets and applies patches directly to working
     # directory.  If conflicts arise, user can resolve them and continue
@@ -1519,9 +1561,9 @@ def _genbranch(root, patchesdir, config, args):
         if not args.branch:
             # use whatever is currently checked out, might as well be in
             # detached state
-            git(f"reset --hard {pile.baseline()}")
+            git(f"reset --hard {effective_baseline}")
         else:
-            git(f"checkout -B {args.branch} {pile.baseline()}")
+            git(f"checkout -B {args.branch} {effective_baseline}")
 
         any_fallback = False
 
@@ -1559,11 +1601,15 @@ pile patches."""
                 "of the pile. Pile needs to be updated to match result branch"
             )
 
+        if cache:
+            cache.update(pile_for_cache, "HEAD")
+            cache.save()
+
         return 0
 
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
-    with temporary_worktree(pile.baseline(), root) as d:
+    with temporary_worktree(effective_baseline, root) as d:
         branch = args.branch if args.branch else config.result_branch
         path = git_worktree_get_checkout_path(root, branch)
 
@@ -1576,6 +1622,10 @@ pile patches."""
 
         if args.dirty:
             raise temporary_worktree.Break
+
+        if cache:
+            cache.update(pile_for_cache, "HEAD")
+            cache.save()
 
         head = git(["-C", d, "rev-parse", "HEAD"]).stdout.strip()
 
@@ -2096,6 +2146,14 @@ series  config  X'.patch  Y'.patch  Z'.patch
     parser_genbranch.add_argument(
         "-x", "--baseline", help="Ignoring baseline from pile, use whatever provided as argument", default=None
     )
+    parser_genbranch.add_argument("--no-cache", action="store_false", dest="use_cache")
+    parser_genbranch.add_argument(
+        "--cache",
+        help="Use cached information to avoid recreating commits. "
+        f'Default behavior is {"" if config.genbranch_use_cache else "NOT "}to use cache.',
+        dest="use_cache",
+    )
+    parser_genbranch.set_defaults(use_cache=config.genbranch_use_cache)
     parser_genbranch.set_defaults(func=cmd_genbranch)
 
     # format-patch
