@@ -1874,7 +1874,7 @@ def cmd_reset(args):
         print("\nPile synchronized with current remote.")
 
 
-def parse_args(cmd_args):
+def parse_args(cmd_args, config):
     desc = """Manage a pile of patches on top of a git branch
 
 git-pile helps to manage a long running and always changing list of patches on
@@ -2372,7 +2372,9 @@ shortcut. From more verbose to the easiest ones:
 def main(*cmd_args):
     log_enable_color(sys.stdout.isatty(), sys.stderr.isatty())
 
-    args = parse_args(cmd_args)
+    config = Config()
+
+    args = parse_args(cmd_args, config)
     if not args:
         return 1
 
