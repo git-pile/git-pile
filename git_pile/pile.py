@@ -126,6 +126,16 @@ class Pile:
         """
         self.__get_config(refresh=True)
 
+    def series(self):
+        """
+        Yield a PilePatch object for each patch found in the pile series.
+        """
+        for line in self.__reader.text("series").splitlines():
+            line = line.strip()
+            if not line or line[0] == "#":
+                continue
+            yield PilePatch(line, self.__reader)
+
     def __loc_phrase(self):
         if self.__rev:
             return f"pile revision {self.__rev}"
@@ -147,6 +157,15 @@ class Pile:
 
         self.__config = data
         return self.__config
+
+
+class PilePatch:
+    def __init__(self, name, reader):
+        self.name = name
+        self.__reader = reader
+
+    def sha1(self):
+        return self.__reader.sha1(self.name)
 
 
 class PileError(Exception):
@@ -190,6 +209,15 @@ class _FileReader(abc.ABC):
         """
         raise NotImplementedError()
 
+    @abc.abstractmethod
+    def sha1(self, *path):
+        """
+        Generate the git sha-1 digest for the file pointed by ``path``.
+
+        This must raise a FileNotFoundError if the file is not found.
+        """
+        raise NotImplementedError()
+
 
 class _PathReader(_FileReader):
     def __init__(self, path):
@@ -205,6 +233,9 @@ class _PathReader(_FileReader):
 
     def text(self, *path):
         return self.__path.joinpath(*path).read_text()
+
+    def sha1(self, *path):
+        return _git(["hash-object", "--", str(self.__path.joinpath(*path))]).stdout.strip()
 
     def __filter_git_ignored(self, path_iter):
         try:
@@ -258,6 +289,10 @@ class _RevReader(_FileReader):
         gitpath = "/".join(path)
         revspec = f"{self.__rev}:{gitpath}"
         return _git(["show", revspec]).stdout
+
+    def sha1(self, *path):
+        _, _, sha1 = self.__ls_path(path)
+        return sha1
 
     def __ls_path(self, path, fmt=""):
         if len(path) == 1:

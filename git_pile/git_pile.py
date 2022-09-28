@@ -1484,11 +1484,7 @@ def _genbranch(root, patchesdir, config, args):
     check_baseline_exists(pile.baseline())
 
     try:
-        patchlist = [
-            op.join(patchesdir, p.strip())
-            for p in open(op.join(patchesdir, "series")).readlines()
-            if len(p.strip()) > 0 and p[0] != "#"
-        ]
+        patchlist = [op.join(patchesdir, p.name) for p in pile.series()]
     except FileNotFoundError:
         patchlist = []
 
