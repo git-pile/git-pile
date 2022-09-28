@@ -327,7 +327,7 @@ def temporary_worktree(commit, dir, prefix="git-pile-worktree"):
         git(f"worktree remove {d}")
 
 
-def cmd_init(args):
+def cmd_init(args, config):
     assert_required_tools()
 
     try:
@@ -342,7 +342,7 @@ def cmd_init(args):
     if op.exists(args.dir):
         fatal(f"'{args.dir}' already exists")
 
-    oldconfig = Config()
+    oldconfig = config
 
     git(f"config pile.dir {args.dir}")
     git(f"config pile.pile-branch {args.pile_branch}")
@@ -384,7 +384,7 @@ def cmd_init(args):
     return 0
 
 
-def cmd_setup(args):
+def cmd_setup(args, _):
     assert_required_tools()
 
     create_pile_branch = True
@@ -859,8 +859,7 @@ def gen_individual_patches(output_dir, reroll_count_str, n_patches, subject_pref
     return patches
 
 
-def cmd_genpatches(args):
-    config = Config()
+def cmd_genpatches(args, config):
     if not config.check_is_valid():
         return 1
 
@@ -1075,8 +1074,7 @@ def git_am_solve_diff_hunk_conflicts(args, patchesdir):
     return resolved
 
 
-def cmd_am(args):
-    config = Config()
+def cmd_am(args, config):
     if not config.check_is_valid():
         return 1
 
@@ -1286,11 +1284,10 @@ def assert_format_patch_compatible_args(args):
         fatal("-C and -F options are mutually exclusive")
 
 
-def cmd_format_patch(args):
+def cmd_format_patch(args, config):
     assert_required_tools()
     assert_format_patch_compatible_args(args)
 
-    config = Config()
     if not config.check_is_valid():
         return 1
 
@@ -1591,8 +1588,7 @@ pile patches."""
     return 0
 
 
-def cmd_genbranch(args):
-    config = Config()
+def cmd_genbranch(args, config):
     root = git_root_or_die()
     patchesdir = op.join(root, config.dir)
 
@@ -1635,8 +1631,7 @@ def get_refs_from_linearized(incremental, pile_branch, start_ref, linear_branch,
     return None, pile_range
 
 
-def cmd_genlinear_branch(args):
-    config = Config()
+def cmd_genlinear_branch(args, config):
     if not config.check_is_valid():
         return 1
 
@@ -1769,8 +1764,7 @@ def cmd_genlinear_branch(args):
     return 0
 
 
-def cmd_baseline(args):
-    config = Config()
+def cmd_baseline(args, config):
     if not config.check_is_valid():
         return 1
 
@@ -1792,10 +1786,9 @@ def cmd_baseline(args):
     return 0
 
 
-def cmd_destroy(args):
+def cmd_destroy(args, config):
     # everything here should work even if we have an invalid/partial
     # configuration.
-    config = Config()
 
     # everything here is relative to root
     os.chdir(git_root_or_die())
@@ -1817,8 +1810,7 @@ def cmd_destroy(args):
         git_(f"branch -D {config.pile_branch}")
 
 
-def cmd_reset(args):
-    config = Config()
+def cmd_reset(args, config):
     if not config.check_is_valid():
         return 1
 
@@ -2379,7 +2371,7 @@ def main(*cmd_args):
         return 1
 
     try:
-        return args.func(args)
+        return args.func(args, config)
     except KeyboardInterrupt:
         return 130
 
