@@ -18,6 +18,52 @@ setup() {
   git push origin -u --all
 }
 
+# Usage: run_genbranch [<genbranch_cmd>...]
+#
+# Run genbranch and do common assertions.
+#
+# If <genbranch_cmd>... is not provided, `git pile genbranch -i` is used by
+# default.
+run_genbranch() {
+  if [[ $# -eq 0 ]]; then
+    set -- git pile genbranch -i
+  fi
+  run --separate-stderr "$@"
+}
+
+# Usage: assert_cached <offset>
+# The argument <offset> defines the expected number of patches skipped by
+# genbranch. The special value -1 can be used to expect all patches to be
+# skipped.
+assert_cached() {
+  local offset=${1:?Missing offset}
+  local IFS_BKP="$IFS"
+  local IFS=$'\n'
+  local apply_lines=($(git log --reverse --format="Applying: %s" $(git pile baseline)..))
+  IFS="$IFS_BKP"
+  local commit_count=${#apply_lines[@]}
+  local num_lines=${#lines[@]}
+
+  if [[ $offset -eq -1 ]]; then
+    offset=$commit_count
+  fi
+
+  (( commit_count - offset == num_lines ))
+
+  local i
+  for ((i = 0; i < num_lines; i++)); do
+    [ "${lines[i]}" = "${apply_lines[offset + i]}" ]
+  done
+}
+
+assert_not_cached() {
+  assert_cached 0
+}
+
+assert_fully_cached() {
+  assert_cached -1
+}
+
 # General caching checks
 @test "genbranch-caching-general" {
   echo "pile 1" > j.txt && git add j.txt && git commit -m "1st commit after baseline"
@@ -26,68 +72,39 @@ setup() {
   echo "pile 4" > j.txt && git add j.txt && git commit -m "4th commit after baseline"
 
   git pile genpatches -m "First pile commit"
-  run --separate-stderr git pile genbranch -i
-  [ "${lines[0]}" = "Applying: 1st commit after baseline" ]
-  [ "${lines[1]}" = "Applying: 2nd commit after baseline" ]
-  [ "${lines[2]}" = "Applying: 3rd commit after baseline" ]
-  [ "${lines[3]}" = "Applying: 4th commit after baseline" ]
-  [ ${#lines[@]} -eq 4 ]
-
+  run_genbranch
+  assert_not_cached
   tip_first_series=$(git rev-parse HEAD)
 
   git reset --hard HEAD~2
-
   echo "pile iii" > j.txt && git add j.txt && git commit -m "iii commit after baseline"
   echo "pile iv" > j.txt && git add j.txt && git commit -m "iv commit after baseline"
-
   git pile genpatches -m "Second pile commit"
-  run --separate-stderr git pile genbranch -i
-  [ "${lines[0]}" = "Applying: iii commit after baseline" ]
-  [ "${lines[1]}" = "Applying: iv commit after baseline" ]
-  [ ${#lines[@]} -eq 2 ]
+  run_genbranch
+  assert_cached 2
 
   git -C "$(git config pile.dir)" reset --hard HEAD~1
-  run --separate-stderr git pile genbranch -i
-  [ ${#lines} -eq 0 ]
+  run_genbranch
+  assert_fully_cached
   [ $(git rev-parse HEAD) = "$tip_first_series" ]
 
   # Cases below should trigger a "full genbranch"
 
-  run --separate-stderr git -c pile.genbranch-user-name="pile bot 2" pile genbranch -i
-  [ "${lines[0]}" = "Applying: 1st commit after baseline" ]
-  [ "${lines[1]}" = "Applying: 2nd commit after baseline" ]
-  [ "${lines[2]}" = "Applying: 3rd commit after baseline" ]
-  [ "${lines[3]}" = "Applying: 4th commit after baseline" ]
-  [ ${#lines[@]} -eq 4 ]
+  run_genbranch git -c pile.genbranch-user-name="pile bot 2" pile genbranch -i
+  assert_not_cached
 
-  run --separate-stderr git pile genbranch -i --fix-whitespace
-  [ "${lines[0]}" = "Applying: 1st commit after baseline" ]
-  [ "${lines[1]}" = "Applying: 2nd commit after baseline" ]
-  [ "${lines[2]}" = "Applying: 3rd commit after baseline" ]
-  [ "${lines[3]}" = "Applying: 4th commit after baseline" ]
-  [ ${#lines[@]} -eq 4 ]
+  run_genbranch git pile genbranch -i --fix-whitespace
+  assert_not_cached
   [[ "$stderr" = *"warning: Caching disabled because of non-default genbranch operation: using option --fix-whitespace"* ]]
 
-  run --separate-stderr git -c pile.genbranch-use-cache=false pile genbranch -i
-  [ "${lines[0]}" = "Applying: 1st commit after baseline" ]
-  [ "${lines[1]}" = "Applying: 2nd commit after baseline" ]
-  [ "${lines[2]}" = "Applying: 3rd commit after baseline" ]
-  [ "${lines[3]}" = "Applying: 4th commit after baseline" ]
-  [ ${#lines[@]} -eq 4 ]
+  run_genbranch git -c pile.genbranch-use-cache=false pile genbranch -i
+  assert_not_cached
 
-  run --separate-stderr git pile genbranch -i --no-cache
-  [ "${lines[0]}" = "Applying: 1st commit after baseline" ]
-  [ "${lines[1]}" = "Applying: 2nd commit after baseline" ]
-  [ "${lines[2]}" = "Applying: 3rd commit after baseline" ]
-  [ "${lines[3]}" = "Applying: 4th commit after baseline" ]
-  [ ${#lines[@]} -eq 4 ]
+  run_genbranch git pile genbranch -i --no-cache
+  assert_not_cached
 
-  run --separate-stderr git -c pile.genbranch-cache-path=other-file.pickle pile genbranch -i
-  [ "${lines[0]}" = "Applying: 1st commit after baseline" ]
-  [ "${lines[1]}" = "Applying: 2nd commit after baseline" ]
-  [ "${lines[2]}" = "Applying: 3rd commit after baseline" ]
-  [ "${lines[3]}" = "Applying: 4th commit after baseline" ]
-  [ ${#lines[@]} -eq 4 ]
+  run_genbranch git -c pile.genbranch-cache-path=other-file.pickle pile genbranch -i
+  assert_not_cached
 }
 
 # Check that caching works as expected when updating with changes from other
@@ -99,7 +116,8 @@ setup() {
   echo "pile 4" > j.txt && git add j.txt && git commit -m "4th commit after baseline"
 
   git pile genpatches -m "First pile commit"
-  git pile genbranch -i
+  run_genbranch
+  assert_not_cached
   git push origin --all -f
 
   # Do work on another repository: replace commit "2nd commit after baseline"
@@ -114,7 +132,8 @@ setup() {
   echo "pile ii" > j.txt && git add j.txt && git commit -m "ii commit after baseline"
   git cherry-pick -X theirs origin/internal~2..origin/internal
   git pile genpatches -m "Second pile commit"
-  git pile genbranch -i
+  run_genbranch
+  assert_not_cached
   git push origin --all -f
   popd
 
@@ -126,13 +145,10 @@ setup() {
   echo "pile iii" > j.txt && git add j.txt && git commit -m "iii commit after baseline"
   git cherry-pick -X theirs origin/internal~1..origin/internal
   git pile genpatches -m "Third pile commit"
-  run --separate-stderr git pile genbranch -i
+  run_genbranch
   # Only commit "1st commit after baseline" should be used from the cache at
   # this point.
-  [ "${lines[0]}" = "Applying: ii commit after baseline" ]
-  [ "${lines[1]}" = "Applying: iii commit after baseline" ]
-  [ "${lines[2]}" = "Applying: 4th commit after baseline" ]
-  [ ${#lines[@]} -eq 3 ]
+  assert_cached 1
 }
 
 # Check that caching works as expected when reordering commits
@@ -143,12 +159,8 @@ setup() {
   echo "pile 4" > j.txt && git add j.txt && git commit -m "4th commit after baseline"
 
   git pile genpatches -m "First pile commit"
-  run --separate-stderr git pile genbranch -i
-  [ "${lines[0]}" = "Applying: 1st commit after baseline" ]
-  [ "${lines[1]}" = "Applying: 2nd commit after baseline" ]
-  [ "${lines[2]}" = "Applying: 3rd commit after baseline" ]
-  [ "${lines[3]}" = "Applying: 4th commit after baseline" ]
-  [ ${#lines[@]} -eq 4 ]
+  run_genbranch
+  assert_not_cached
 
   # Cache should still be used after reordering commits without modifying the
   # pile branch.
@@ -156,8 +168,8 @@ setup() {
   commits=($(git rev-list --reverse HEAD~4..))
   git reset --hard HEAD~4
   git cherry-pick -X theirs "${commits[0]}" "${commits[3]}" "${commits[2]}" "${commits[1]}"
-  run --separate-stderr git pile genbranch -i
-  [ ${#lines} -eq 0 ]
+  run_genbranch
+  assert_fully_cached
   [ $(git rev-parse HEAD) = "$rev" ]
 }
 
@@ -169,12 +181,8 @@ setup() {
   echo "pile 4" > j.txt && git add j.txt && git commit -m "4th commit after baseline"
 
   git pile genpatches -m "First pile commit"
-  run --separate-stderr git pile genbranch -i
-  [ "${lines[0]}" = "Applying: 1st commit after baseline" ]
-  [ "${lines[1]}" = "Applying: 2nd commit after baseline" ]
-  [ "${lines[2]}" = "Applying: 3rd commit after baseline" ]
-  [ "${lines[3]}" = "Applying: 4th commit after baseline" ]
-  [ ${#lines[@]} -eq 4 ]
+  run_genbranch
+  assert_not_cached
   rev=$(git rev-parse HEAD)
 
   git reset --hard HEAD~3
@@ -182,11 +190,8 @@ setup() {
   echo "pile iii" > j.txt && git add j.txt && git commit -m "iii commit after baseline"
   echo "pile iv" > j.txt && git add j.txt && git commit -m "iv commit after baseline"
   git pile genpatches -m "Second pile commit"
-  run --separate-stderr git pile genbranch -i
-  [ "${lines[0]}" = "Applying: ii commit after baseline" ]
-  [ "${lines[1]}" = "Applying: iii commit after baseline" ]
-  [ "${lines[2]}" = "Applying: iv commit after baseline" ]
-  [ ${#lines[@]} -eq 3 ]
+  run_genbranch
+  assert_cached 1
 
   # After garbage collection, we expect that the last 3 commits from the first
   # version of the result branch to be removed, so that only the first patch can
@@ -194,9 +199,6 @@ setup() {
   git -c gc.reflogExpire=now gc --prune=now
   ! git cat-file -e $rev
   git -C "$(git config pile.dir)" reset --hard HEAD~1
-  run --separate-stderr git pile genbranch -i
-  [ "${lines[0]}" = "Applying: 2nd commit after baseline" ]
-  [ "${lines[1]}" = "Applying: 3rd commit after baseline" ]
-  [ "${lines[2]}" = "Applying: 4th commit after baseline" ]
-  [ ${#lines[@]} -eq 3 ]
+  run_genbranch
+  assert_cached 1
 }
