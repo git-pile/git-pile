@@ -1,0 +1,8 @@
+#!/bin/bash
+IFS_BKP="$IFS"
+IFS=$'\n'
+git_pile_paths=($(type -a git-pile))
+IFS="$IFS_BKP"
+git_pile_script="${git_pile_paths[1]#git-pile is }"
+export COVERAGE_FILE="$(realpath $(dirname ${BASH_SOURCE[0]})/../../.coverage)"
+exec coverage run -a "$git_pile_script" "$@"

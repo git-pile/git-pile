@@ -27,3 +27,7 @@ create_simple_repo() {
   git add c; git commit -m "Add c"
   popd
 }
+
+if [[ -n $COVERAGE ]]; then
+    export PATH="$BATS_TEST_DIRNAME/coverage-shim:$PATH"
+fi

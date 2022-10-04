@@ -57,6 +57,9 @@ setup(
         ]
     },
     python_requires=">=3.6",
+    extras_require={
+        "tests": ["coverage~=6.5"],
+    },
     data_files=[
         (bash_completion_dir, ["extra/git-pile-complete.sh"]),
         (
