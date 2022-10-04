@@ -26,6 +26,17 @@ setup() {
   [ "$(git diff $rev0..$rev1)" = "" ]
 }
 
+@test "genpatches-untracked-dir-then-genbranch" {
+  echo "pile 1" > j.txt && git add j.txt && git commit -m "add new.txt"
+  rev0=$(git rev-parse HEAD)
+
+  git pile genpatches -o untracked-output-dir
+  git -c pile.dir=untracked-output-dir pile genbranch -i
+
+  rev1=$(git rev-parse HEAD)
+  [ "$(git diff $rev0..$rev1)" = "" ]
+}
+
 # Check that genbranch to another branch name (with -b) works
 # as expected
 @test "genbranch-branch-name" {
