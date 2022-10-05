@@ -34,4 +34,7 @@ pip-log.txt
 cscope.*
 ncscope.*
 
+# coverage data file
+.coverage
+
 /git-pile-wrapper-*

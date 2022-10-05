@@ -10,7 +10,8 @@ Manage a pile of patches on top of a git branch
  - Python >= 3.6
  - git >= 2.19
  - Python modules:
-   - argcomplete (optional)
+   - argcomplete (optional for shell completion)
+   - coverage (optional for tests)
 
 ## Quickstart
 
