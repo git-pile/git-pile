@@ -31,6 +31,8 @@ from .helpers import (
     set_fatal_behavior,
     warn,
 )
+from .pile import Pile, PileError
+from .genbranch_caching import GenbranchCache
 
 try:
     import argcomplete
@@ -97,6 +99,8 @@ class Config:
     __attr_doc_genbranch_committer_date_is_author_date = "(bool): Set committer date as the author date for generated patches. See --committer-date-is-author-date in GIT-COMMIT(1)"
     __attr_doc_genbranch_user_name = "(string): Name to use as committer when generating the commits"
     __attr_doc_genbranch_user_email = "(string): E-mail to use as committer when generating the commits"
+    __attr_doc_genbranch_use_cache = "(bool): Use cached information to avoid recreating commits"
+    __attr_doc_genbranch_cache_path = "(path): Path (relative to the .git dir) to the cache file for genbranch"
 
     def __init__(self):
         self.dir = ""
@@ -110,6 +114,8 @@ class Config:
         self.genbranch_committer_date_is_author_date = True
         self.genbranch_user_name = None
         self.genbranch_user_email = None
+        self.genbranch_use_cache = True
+        self.genbranch_cache_path = "pile-genbranch-cache.pickle"
 
         s = git(["config", "--get-regexp", "^pile\\.*"], check=False, stderr=nul_f).stdout.strip()
         if not s:
@@ -266,27 +272,6 @@ def git_split_index(path="."):
             git(f"-C {path} config --unset splitIndex.sharedIndexExpire")
 
 
-def _parse_baseline_line(iterable):
-    for l in iterable:
-        if l.startswith("BASELINE="):
-            baseline = l[9:].strip()
-            return baseline
-    return None
-
-
-def get_baseline_from_branch(branch):
-    try:
-        out = git(f"show {branch}:config --").stdout
-    except subprocess.CalledProcessError:
-        fatal(f"'{branch}' doesn't look like a valid ref for pile branch: config file not found")
-    return _parse_baseline_line(out.splitlines())
-
-
-def get_baseline(d):
-    with open(op.join(d, "config"), "r") as f:
-        return _parse_baseline_line(f)
-
-
 def update_baseline(d, commit):
     with open(op.join(d, "config"), "w") as f:
         rev = git(f"rev-parse {commit}").stdout.strip()
@@ -312,30 +297,6 @@ def get_branch_from_remote_branch(remote_branch):
         if remote_branch.startswith(l):
             return remote_branch[len(l) + 1 :]
     return None
-
-
-def assert_valid_pile_branch(pile):
-    # --full-tree is necessary so we don't need "-C gitroot"
-    out = git(f"ls-tree -r --name-only --full-tree {pile}").stdout
-    has_config = False
-    has_series = False
-    non_patches = False
-
-    for l in out.splitlines():
-        if l == "config":
-            has_config = True
-        elif l == "series":
-            has_series = True
-        elif not l.endswith(".patch") and not l.startswith(".") and op.dirname(l) != "":
-            non_patches = True
-
-    errorstr = "Branch '{pile}' does not look like a pile branch. No '{filename}' file found."
-    if not has_series:
-        fatal(errorstr.format(pile=pile, filename="series"))
-    if not has_config:
-        fatal(errorstr.format(pile=pile, filename="config"))
-    if non_patches:
-        warn("Branch '{pile}' has non-patch files".format(pile=pile))
 
 
 def assert_valid_result_branch(result_branch, baseline):
@@ -371,7 +332,7 @@ def temporary_worktree(commit, dir, prefix="git-pile-worktree"):
         git(f"worktree remove {d}")
 
 
-def cmd_init(args):
+def cmd_init(args, config):
     assert_required_tools()
 
     try:
@@ -386,7 +347,7 @@ def cmd_init(args):
     if op.exists(args.dir):
         fatal(f"'{args.dir}' already exists")
 
-    oldconfig = Config()
+    oldconfig = config
 
     git(f"config pile.dir {args.dir}")
     git(f"config pile.pile-branch {args.pile_branch}")
@@ -428,7 +389,7 @@ def cmd_init(args):
     return 0
 
 
-def cmd_setup(args):
+def cmd_setup(args, _):
     assert_required_tools()
 
     create_pile_branch = True
@@ -475,12 +436,15 @@ def cmd_setup(args):
         local_result_branch = git(f"-C {gitroot} symbolic-ref --short -q HEAD").stdout.strip()
         create_result_branch = False
 
-    # content of the pile branch looks like a pile branch?
-    assert_valid_pile_branch(args.pile_branch)
-    baseline = get_baseline_from_branch(args.pile_branch)
+    pile = Pile(rev=args.pile_branch)
+    try:
+        # structure of the pile branch looks like a pile branch?
+        pile.validate_structure()
+    except PileError as e:
+        fatal(f"Branch '{args.pile_branch}' does not look like a pile branch: {e}")
 
     # sane result branch wrt baseline configured?
-    assert_valid_result_branch(result_branch, baseline)
+    assert_valid_result_branch(result_branch, pile.baseline())
 
     path = git_worktree_get_checkout_path(gitroot, local_pile_branch)
     patchesdir = op.join(gitroot, args.dir)
@@ -604,7 +568,7 @@ def has_patches(dest):
 
 def parse_commit_range(commit_range, pile_dir, default_end):
     if not commit_range:
-        baseline = get_baseline(pile_dir)
+        baseline = Pile(path=pile_dir).baseline()
         if not baseline:
             fatal(f"no BASELINE configured in {pile_dir}")
         return baseline, default_end
@@ -900,8 +864,7 @@ def gen_individual_patches(output_dir, reroll_count_str, n_patches, subject_pref
     return patches
 
 
-def cmd_genpatches(args):
-    config = Config()
+def cmd_genpatches(args, config):
     if not config.check_is_valid():
         return 1
 
@@ -1116,8 +1079,7 @@ def git_am_solve_diff_hunk_conflicts(args, patchesdir):
     return resolved
 
 
-def cmd_am(args):
-    config = Config()
+def cmd_am(args, config):
     if not config.check_is_valid():
         return 1
 
@@ -1327,18 +1289,18 @@ def assert_format_patch_compatible_args(args):
         fatal("-C and -F options are mutually exclusive")
 
 
-def cmd_format_patch(args):
+def cmd_format_patch(args, config):
     assert_required_tools()
     assert_format_patch_compatible_args(args)
 
-    config = Config()
     if not config.check_is_valid():
         return 1
 
     root = git_root_or_die()
     patchesdir = op.join(root, config.dir)
+    pile = Pile(path=patchesdir)
 
-    oldbaseline, newbaseline, oldref, newref = _parse_format_refs(args.refs, get_baseline(patchesdir))
+    oldbaseline, newbaseline, oldref, newref = _parse_format_refs(args.refs, pile.baseline())
     # make sure the specified baseline commits are part of the branches
     check_baseline_is_ancestor(oldbaseline, oldref)
     check_baseline_is_ancestor(newbaseline, newref)
@@ -1518,17 +1480,13 @@ def _genbranch(root, patchesdir, config, args):
     if not config.check_is_valid():
         return 1
 
-    baseline = args.baseline or get_baseline(patchesdir)
+    pile = Pile(path=patchesdir, baseline=args.baseline)
 
     # Make sure the baseline hasn't been pruned
-    check_baseline_exists(baseline)
+    check_baseline_exists(pile.baseline())
 
     try:
-        patchlist = [
-            op.join(patchesdir, p.strip())
-            for p in open(op.join(patchesdir, "series")).readlines()
-            if len(p.strip()) > 0 and p[0] != "#"
-        ]
+        patchlist = [op.join(patchesdir, p.name) for p in pile.series()]
     except FileNotFoundError:
         patchlist = []
 
@@ -1537,19 +1495,56 @@ def _genbranch(root, patchesdir, config, args):
 
     if not args.dirty:
         apply_cmd = ["-c", "core.splitIndex=true", "am", "--no-3way", "--whitespace=warn"]
+        # Let's be conservative: any change in the default behavior of genbranch
+        # must cause caching to be disabled.
+        cache_not_allowed_reasons = []
+
         if config.genbranch_committer_date_is_author_date:
             apply_cmd.append("--committer-date-is-author-date")
+        else:
+            cache_not_allowed_reasons.append("config pile.genbranch-commiter-date-is-author-date is false")
+
         if args.fix_whitespace:
             apply_cmd.append("--whitespace=fix")
+            cache_not_allowed_reasons.append("using option --fix-whitespace")
 
         env = os.environ.copy()
         if config.genbranch_user_name:
             env["GIT_COMMITTER_NAME"] = config.genbranch_user_name
+
         if config.genbranch_user_email:
             env["GIT_COMMITTER_EMAIL"] = config.genbranch_user_email
+
+        cache_allowed = len(cache_not_allowed_reasons) == 0
+        if args.use_cache and not cache_allowed:
+            cache_not_allowed_reasons = "; ".join(cache_not_allowed_reasons)
+            warn(f"Caching disabled because of non-default genbranch operation: {cache_not_allowed_reasons}")
     else:
         env = None
         apply_cmd = ["apply", "--unsafe-paths", "-p1"]
+
+    if not args.dirty and args.use_cache and cache_allowed:
+        if not config.genbranch_cache_path:
+            fatal("Missing cache path (config value for pile.genbranch-cache-path is empty)")
+        cache_path = op.join(git_worktree_get_git_dir(), config.genbranch_cache_path)
+        committer_ident = git(["var", "GIT_COMMITTER_IDENT"], env=env).stdout
+        cache = GenbranchCache(cache_path, committer_ident=committer_ident)
+        # Use Pile from a revision if possible, so we do not calculate sha1 for
+        # each patch.
+        pile_for_cache = pile
+        try:
+            if git(["-C", patchesdir, "status", "--porcelain"], stderr=nul_f).stdout.strip() == "":
+                pile_rev = git(["-C", patchesdir, "rev-parse", "HEAD"]).stdout.strip()
+                pile_for_cache = Pile(rev=pile_rev, baseline=args.baseline)
+        except subprocess.CalledProcessError:
+            pass
+
+        effective_baseline, patchlist_offset = cache.search_best_base(pile_for_cache)
+        if patchlist_offset:
+            patchlist = patchlist[patchlist_offset:]
+    else:
+        effective_baseline = pile.baseline()
+        cache = None
 
     # "In-place mode" resets and applies patches directly to working
     # directory.  If conflicts arise, user can resolve them and continue
@@ -1566,9 +1561,9 @@ def _genbranch(root, patchesdir, config, args):
         if not args.branch:
             # use whatever is currently checked out, might as well be in
             # detached state
-            git(f"reset --hard {baseline}")
+            git(f"reset --hard {effective_baseline}")
         else:
-            git(f"checkout -B {args.branch} {baseline}")
+            git(f"checkout -B {args.branch} {effective_baseline}")
 
         any_fallback = False
 
@@ -1606,11 +1601,15 @@ pile patches."""
                 "of the pile. Pile needs to be updated to match result branch"
             )
 
+        if cache:
+            cache.update(pile_for_cache, "HEAD")
+            cache.save()
+
         return 0
 
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
-    with temporary_worktree(baseline, root) as d:
+    with temporary_worktree(effective_baseline, root) as d:
         branch = args.branch if args.branch else config.result_branch
         path = git_worktree_get_checkout_path(root, branch)
 
@@ -1624,6 +1623,10 @@ pile patches."""
         if args.dirty:
             raise temporary_worktree.Break
 
+        if cache:
+            cache.update(pile_for_cache, "HEAD")
+            cache.save()
+
         head = git(["-C", d, "rev-parse", "HEAD"]).stdout.strip()
 
         if path:
@@ -1635,8 +1638,7 @@ pile patches."""
     return 0
 
 
-def cmd_genbranch(args):
-    config = Config()
+def cmd_genbranch(args, config):
     root = git_root_or_die()
     patchesdir = op.join(root, config.dir)
 
@@ -1679,8 +1681,7 @@ def get_refs_from_linearized(incremental, pile_branch, start_ref, linear_branch,
     return None, pile_range
 
 
-def cmd_genlinear_branch(args):
-    config = Config()
+def cmd_genlinear_branch(args, config):
     if not config.check_is_valid():
         return 1
 
@@ -1710,7 +1711,7 @@ def cmd_genlinear_branch(args):
         # BASELINE from the first rev is a good guesstimate, but it may not
         # exist. In that case, just checkout anything, we are going to reset
         # to a new commit as the first thing anyway
-        commit = get_baseline(piledir) or refs[0]
+        commit = Pile(path=piledir).baseline() or refs[0]
         with temporary_worktree(commit, root) as resultdir:
             last_good_ref = None
             tree = "tree " + git(f"log --format=%T -1 {parent_ref}").stdout.strip() if parent_ref else None
@@ -1813,31 +1814,31 @@ def cmd_genlinear_branch(args):
     return 0
 
 
-def cmd_baseline(args):
-    config = Config()
+def cmd_baseline(args, config):
     if not config.check_is_valid():
         return 1
 
     root = git_root_or_die()
     patchesdir = op.join(root, config.dir)
+    pile_from_dir = Pile(path=patchesdir)
+    pile_from_rev = Pile(rev=args.ref or config.pile_branch)
     if args.ref is None:
-        b_dir = get_baseline(patchesdir)
-        b_branch = get_baseline_from_branch(config.pile_branch)
+        b_dir = pile_from_dir.baseline()
+        b_branch = pile_from_rev.baseline()
 
         if b_dir != b_branch:
             fatal(f"Pile branch '{config.pile_branch}' has baseline {b_branch}, but directory is currently at {b_dir}")
     else:
-        b_branch = get_baseline_from_branch(args.ref)
+        b_branch = pile_from_rev.baseline()
 
     print(b_branch)
 
     return 0
 
 
-def cmd_destroy(args):
+def cmd_destroy(args, config):
     # everything here should work even if we have an invalid/partial
     # configuration.
-    config = Config()
 
     # everything here is relative to root
     os.chdir(git_root_or_die())
@@ -1859,8 +1860,7 @@ def cmd_destroy(args):
         git_(f"branch -D {config.pile_branch}")
 
 
-def cmd_reset(args):
-    config = Config()
+def cmd_reset(args, config):
     if not config.check_is_valid():
         return 1
 
@@ -1916,7 +1916,7 @@ def cmd_reset(args):
         print("\nPile synchronized with current remote.")
 
 
-def parse_args(cmd_args):
+def parse_args(cmd_args, config):
     desc = """Manage a pile of patches on top of a git branch
 
 git-pile helps to manage a long running and always changing list of patches on
@@ -2146,6 +2146,14 @@ series  config  X'.patch  Y'.patch  Z'.patch
     parser_genbranch.add_argument(
         "-x", "--baseline", help="Ignoring baseline from pile, use whatever provided as argument", default=None
     )
+    parser_genbranch.add_argument("--no-cache", action="store_false", dest="use_cache")
+    parser_genbranch.add_argument(
+        "--cache",
+        help="Use cached information to avoid recreating commits. "
+        f'Default behavior is {"" if config.genbranch_use_cache else "NOT "}to use cache.',
+        dest="use_cache",
+    )
+    parser_genbranch.set_defaults(use_cache=config.genbranch_use_cache)
     parser_genbranch.set_defaults(func=cmd_genbranch)
 
     # format-patch
@@ -2414,12 +2422,14 @@ shortcut. From more verbose to the easiest ones:
 def main(*cmd_args):
     log_enable_color(sys.stdout.isatty(), sys.stderr.isatty())
 
-    args = parse_args(cmd_args)
+    config = Config()
+
+    args = parse_args(cmd_args, config)
     if not args:
         return 1
 
     try:
-        return args.func(args)
+        return args.func(args, config)
     except KeyboardInterrupt:
         return 130
 
