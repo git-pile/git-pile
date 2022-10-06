@@ -315,7 +315,6 @@ class _RevReader(_FileReader):
             "ls-tree",
             "-z",
             "--full-tree",
-            "--format=%(objectname) %(objecttype) %(path)",
             self.__rev,
         ]
         if path is not None:
@@ -324,7 +323,7 @@ class _RevReader(_FileReader):
 
         info = collections.OrderedDict()
         for entry in _git(cmd).stdout.rstrip("\x00").split("\x00"):
-            sha1, objecttype, name = entry.split(" ", maxsplit=2)
+            _, objecttype, sha1, name = entry.split(maxsplit=3)
             info[name] = name, objecttype, sha1
 
         if path is None:
