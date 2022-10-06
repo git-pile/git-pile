@@ -31,3 +31,13 @@ create_simple_repo() {
 if [[ -n $COVERAGE ]]; then
     export PATH="$BATS_TEST_DIRNAME/coverage-shim:$PATH"
 fi
+
+if [[ -n "$GIT" ]]; then
+    if [[ -d "$GIT" || ! -x "$GIT" ]]; then
+        echo "Path passed to GIT must be an executable file: $GIT" >&2
+        exit 1
+    fi
+    mkdir "$BATS_FILE_TMPDIR/git-path"
+    ln -s "$GIT" "$BATS_FILE_TMPDIR/git-path/git"
+    export PATH="$BATS_FILE_TMPDIR/git-path:$PATH"
+fi
