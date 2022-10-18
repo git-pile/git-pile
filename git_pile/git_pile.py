@@ -1133,7 +1133,7 @@ Good luck! ¯\_(ツ)_/¯"""
     if args.genbranch:
         info(f"Generating branch '{config.result_branch}'")
         genbranch_args = parse_args(["genbranch", "--force"])
-        return cmd_genbranch(genbranch_args)
+        return cmd_genbranch(genbranch_args, config)
 
     return 0
 
