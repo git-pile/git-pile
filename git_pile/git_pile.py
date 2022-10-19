@@ -2151,6 +2151,7 @@ series  config  X'.patch  Y'.patch  Z'.patch
         "--cache",
         help="Use cached information to avoid recreating commits. "
         f'Default behavior is {"" if config.genbranch_use_cache else "NOT "}to use cache.',
+        action="store_true",
         dest="use_cache",
     )
     parser_genbranch.set_defaults(use_cache=config.genbranch_use_cache)
