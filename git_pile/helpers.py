@@ -12,6 +12,10 @@ log_color = (False, True, True)
 fatal_behavior = "exit"
 
 
+def get_debugging():
+    return debug_run
+
+
 def set_debugging(val):
     global debug_run
     debug_run = val
