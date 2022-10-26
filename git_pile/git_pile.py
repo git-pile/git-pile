@@ -2024,6 +2024,8 @@ class GenbranchCmd(PileCommand):
 def get_refs_from_linearized(incremental, pile_branch, start_ref, linear_branch, notes_ref):
     if start_ref:
         pile_range = f"{start_ref}^..{pile_branch}"
+    else:
+        pile_range = pile_branch
 
     if not incremental:
         return None, pile_range
