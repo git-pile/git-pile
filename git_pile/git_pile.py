@@ -102,6 +102,10 @@ class Config:
     __attr_doc_genbranch_use_cache = "(bool): Use cached information to avoid recreating commits"
     __attr_doc_genbranch_cache_path = "(path): Path (relative to the .git dir) to the cache file for genbranch"
 
+    @classmethod
+    def per_worktree(cls):
+        return git_can_fail("config --get --bool extensions.worktreeConfig", stderr=nul_f).stdout.strip() == "true"
+
     def __init__(self):
         self.dir = ""
         self.linear_branch = ""
@@ -116,6 +120,12 @@ class Config:
         self.genbranch_user_email = None
         self.genbranch_use_cache = True
         self.genbranch_cache_path = "pile-genbranch-cache.pickle"
+        self.write = None
+
+        if Config.per_worktree():
+            self.write = run_wrapper(["git", "config", "--worktree"], capture=True)
+        else:
+            self.write = run_wrapper(["git", "config"], capture=True)
 
         s = git(["config", "--get-regexp", "^pile\\.*"], check=False, stderr=nul_f).stdout.strip()
         if not s:
@@ -157,18 +167,18 @@ class Config:
 
         self.dir = other.dir
         if self.dir:
-            git("config pile.dir %s" % self.dir)
+            self.write("pile.dir %s" % self.dir)
 
         self.result_branch = other.result_branch
         if self.result_branch:
-            git("config pile.result-branch %s" % self.result_branch)
+            self.write("pile.result-branch %s" % self.result_branch)
 
         self.pile_branch = other.pile_branch
         if self.pile_branch:
-            git("config pile.pile-branch %s" % self.pile_branch)
+            self.write("pile.pile-branch %s" % self.pile_branch)
 
     def destroy(self):
-        git("config --remove-section pile", check=False, stderr=nul_f, stdout=nul_f)
+        return self.write("--remove-section pile", check=False, stderr=nul_f, stdout=nul_f).returncode == 0
 
     @classmethod
     def help(cls, prefix=""):
@@ -249,8 +259,13 @@ def git_worktree_get_git_dir(path="."):
 
 @contextmanager
 def git_split_index(path="."):
+    if Config.per_worktree():
+        config_cmd = "config --worktree"
+    else:
+        config_cmd = "config"
+
     # only change if not explicitely configure in config
-    change_split_index = git_can_fail(f"-C {path} config --get core.splitIndex").returncode != 0
+    change_split_index = git_can_fail(f"-C {path} {config_cmd} --get core.splitIndex").returncode != 0
 
     if not change_split_index:
         try:
@@ -258,18 +273,18 @@ def git_split_index(path="."):
         finally:
             return
 
-    change_shared_index_expire = git_can_fail(f"-C {path} config --get splitIndex.sharedIndexExpire").returncode != 0
+    change_shared_index_expire = git_can_fail(f"-C {path} {config_cmd} --get splitIndex.sharedIndexExpire").returncode != 0
 
     try:
         git(f"-C {path} update-index --split-index")
         if change_shared_index_expire:
-            git(f"-C {path} config splitIndex.sharedIndexExpire now")
+            git(f"-C {path} {config_cmd} splitIndex.sharedIndexExpire now")
 
         yield
     finally:
         git(f"-C {path} update-index --no-split-index")
         if change_shared_index_expire:
-            git(f"-C {path} config --unset splitIndex.sharedIndexExpire")
+            git(f"-C {path} {config_cmd} --unset splitIndex.sharedIndexExpire")
 
 
 def update_baseline(d, commit):
@@ -382,10 +397,11 @@ class InitCmd(PileCommand):
 
         oldconfig = config
 
-        git(f"config pile.dir {args.dir}")
-        git(f"config pile.pile-branch {args.pile_branch}")
-        git(f"config pile.result-branch {args.result_branch}")
+        config.write(f"pile.dir {args.dir}")
+        config.write(f"pile.pile-branch {args.pile_branch}")
+        config.write(f"pile.result-branch {args.result_branch}")
 
+        # reload config as write doesn't change state
         config = Config()
 
         if not git_branch_exists(config.pile_branch):
@@ -569,9 +585,10 @@ class SetupCmd(PileCommand):
                 fatal(f"failed to checkout worktree for '{local_pile_branch}' at {args.dir}")
 
         # write down configuration
-        git(f"config pile.dir {args.dir}")
-        git(f"config pile.pile-branch {local_pile_branch}")
-        git(f"config pile.result-branch {local_result_branch}")
+        config = Config()
+        config.write(f"pile.dir {args.dir}")
+        config.write(f"pile.pile-branch {local_pile_branch}")
+        config.write(f"pile.result-branch {local_result_branch}")
 
         tracked_pile = git("rev-parse --abbrev-ref %s@{u}" % local_pile_branch, check=False).stdout
         if tracked_pile:
@@ -2281,7 +2298,7 @@ class DestroyCmd(PileCommand):
         os.chdir(git_root_or_die())
 
         # implode - we have the cached values saved in config
-        if git("config --remove-section pile", check=False, stderr=nul_f).returncode != 0:
+        if not config.destroy():
             fatal("pile not initialized")
 
         git_ = run_wrapper("git", capture=True, check=False, print_error_as_ignored=True)
