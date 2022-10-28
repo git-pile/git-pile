@@ -82,6 +82,7 @@ class run_wrapper:
         kwargs["check"] = kwargs.get("check", self.check)
         kwargs["shell"] = kwargs.get("shell", self.shell)
 
+        cmd = [self.cmd] if isinstance(self.cmd, str) else self.cmd.copy()
         if isinstance(s, str):
             l = s.split()
         elif not s:
@@ -89,13 +90,13 @@ class run_wrapper:
         else:
             l = s
 
-        l.insert(0, self.cmd)
+        cmd.extend(l)
 
-        cmd_debug = " ".join(shlex.quote(x) for x in l)
+        cmd_debug = " ".join(shlex.quote(x) for x in cmd)
         if debug_run:
             print("+ " + cmd_debug, file=sys.stderr)
 
-        ret = subprocess.run(l, *args, **kwargs)
+        ret = subprocess.run(cmd, *args, **kwargs)
 
         if self.print_error_as_ignored and ret.returncode != 0:
             print("Ignoring failed command: '{}'".format(cmd_debug))
