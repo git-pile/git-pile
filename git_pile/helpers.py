@@ -82,17 +82,8 @@ class run_wrapper:
         kwargs["check"] = kwargs.get("check", self.check)
         kwargs["shell"] = kwargs.get("shell", self.shell)
 
-        cmd = [self.cmd] if isinstance(self.cmd, str) else self.cmd.copy()
-        if isinstance(s, str):
-            l = s.split()
-        elif not s:
-            l = []
-        else:
-            l = s
+        cmd, cmd_debug = self._assemble_cmd(s)
 
-        cmd.extend(l)
-
-        cmd_debug = " ".join(shlex.quote(x) for x in cmd)
         if debug_run:
             print("+ " + cmd_debug, file=sys.stderr)
 
@@ -103,6 +94,24 @@ class run_wrapper:
             print("\t", ret.stderr, end="", file=sys.stderr)
 
         return ret
+
+    def _assemble_cmd(self, tail):
+        if self.shell:
+            cmd = self.cmd + " " + tail
+            cmd_debug = cmd
+        else:
+            cmd = [self.cmd] if isinstance(self.cmd, str) else self.cmd.copy()
+            if isinstance(tail, str):
+                l = tail.split()
+            elif not tail:
+                l = []
+            else:
+                l = tail
+
+            cmd.extend(l)
+            cmd_debug = " ".join(shlex.quote(x) for x in cmd)
+
+        return cmd, cmd_debug
 
 
 class subcmd:
