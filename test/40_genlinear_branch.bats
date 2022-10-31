@@ -68,3 +68,22 @@ setup() {
   trailers="$(git log --format="%N" --notes=refs/notes/internal-linear $rev0..internal-linear | sed -e 's/pile-commit: //' -e '/^$/d')"
   [ "$(git log --format=%H $pile_rev0..pile)" = "$trailers" ]
 }
+
+# Check pre/post genbranch hooks
+@test "genlinear-branch-with-hooks" {
+  git pile genlinear-branch -b internal-linear \
+        --pre-genbranch-exec "echo foo >> $PWD/out.txt" \
+	--post-genbranch-exec "echo bar >> $PWD/out.txt"
+  [ -f "out.txt" ]
+
+  # initial commit doesn't get a post exec
+  echo foo >> expected.txt
+
+  n=$(git rev-list --count pile)
+  for (( i=0; i < n - 1; i++ )); do
+    echo foo >> expected.txt
+    echo bar >> expected.txt
+  done
+
+  cmp expected.txt out.txt
+}
