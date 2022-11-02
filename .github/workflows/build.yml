@@ -124,6 +124,14 @@ jobs:
           echo "TAP version 13\r" > git.tap
           bats --tap -T test | tee -a git.tap
 
+      - name: Run tests (git v2.20.x)
+        if: always()
+        run: |
+          export PATH=/usr/local/git-v2.20.x/bin:$PATH
+          git --version
+          echo "TAP version 13\r" > git-v2.20.tap
+          bats --tap -T test | tee -a git-v2.20.tap
+
       - name: Run tests (git v2.25.x)
         if: always()
         run: |

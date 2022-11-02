@@ -7,7 +7,6 @@ import email.header
 import math
 import os
 import os.path as op
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -55,30 +54,31 @@ except ImportError:
     warn("can't find python3-argcomplete: argument completion won't be available")
     pass
 
+MIN_GIT_VERSION = "2.20"
+
 
 def log10_or_zero(n):
     return math.log10(n) if n else 0
 
 
-def assert_required_tools():
-    error_msg_git = "git >= 2.19 is needed, please check requirements"
+def git_version_check(required_version):
+    def _tuple(s):
+        # ignore anything beyond x.y.z
+        return tuple([int(x) for x in s.split(".")[:3]])
 
-    # We need git range-diff from git >= 2.19. Instead of checking the version, let's try to check
-    # the feature we are interested in. We also have other requirements for using this version
-    # like worktree working properly. However that should be available on any version that has
-    # range-diff.
     try:
-        exec_path = git("--exec-path").stdout.strip()
-    except subprocess.CalledProcessError:
-        fatal(error_msg_git)
+        # git version x.y.z[.build.sha1]
+        out = git(["--version"]).stdout
+        version = out.split()[2]
 
-    path = os.getenv("PATH") + ":" + exec_path
-    if not shutil.which("git-range-diff", path=path):
-        # Let's be resilient to weird installations not having the symlink in place.
-        # For some reason "git range-diff -h" returns 129 rather than the usual 0
-        # ¯\_(ツ)_/¯
-        if git("range-diff -h", check=False, capture=False, stderr=nul_f).returncode != 129:
-            fatal(error_msg_git)
+        if _tuple(version) < _tuple(required_version):
+            fatal(f"found git version {version}, required >= {required_version}")
+    except:
+        warn(f"unable to check git version, required >= {required_version}")
+
+
+def assert_required_tools():
+    git_version_check(MIN_GIT_VERSION)
 
 
 def update_baseline(d, commit):
