@@ -12,13 +12,26 @@ import subprocess
 import sys
 import tempfile
 import timeit
-from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from time import strftime
 
 from . import __version__
 from .cli import PileCLI, PileCommand
 from .config import Config
+from .gitutil import (
+    git_branch_exists,
+    git_get_editor,
+    git_init,
+    git_ref_exists,
+    git_ref_is_ancestor,
+    git_remote_branch_exists,
+    git_root_or_die,
+    git_split_index,
+    git_temporary_worktree,
+    git_worktree_get_checkout_path,
+    git_worktree_get_git_dir,
+)
 from .helpers import (
     error,
     fatal,
@@ -49,18 +62,6 @@ def log10_or_zero(n):
     return math.log10(n) if n else 0
 
 
-# Mimic git bevavior to find the editor. We need to do this since
-# GIT_EDITOR was overriden
-def get_git_editor():
-    return (
-        os.environ.get("GIT_EDITOR", None)
-        or git(["config", "core.editor"], check=False).stdout.strip()
-        or os.environ.get("VISUAL", None)
-        or os.environ.get("EDITOR", None)
-        or "vi"
-    )
-
-
 def assert_required_tools():
     error_msg_git = "git >= 2.19 is needed, please check requirements"
 
@@ -80,98 +81,6 @@ def assert_required_tools():
         # ¯\_(ツ)_/¯
         if git("range-diff -h", check=False, capture=False, stderr=nul_f).returncode != 129:
             fatal(error_msg_git)
-
-
-def git_branch_exists(branch):
-    return git(f"show-ref --verify --quiet refs/heads/{branch}", check=False).returncode == 0
-
-
-def git_ref_exists(ref):
-    return git(f"show-ref --verify --quiet {ref}", check=False).returncode == 0
-
-
-def git_remote_branch_exists(remote_and_branch):
-    return git(f"show-ref --verify --quiet refs/remotes/{remote_and_branch}", check=False).returncode == 0
-
-
-def git_init(branch, directory):
-    if git_can_fail(f"-C {directory} init -b {branch}", stderr=nul_f).returncode == 0:
-        return
-
-    # git-init in git < 2.28 doesn't have a -b switch. Try to do that ourselves
-    git(f"-C {directory} init")
-    git(f"-C {directory} checkout -b {branch}")
-
-
-# Return the git root of current worktree or abort when not in a worktree
-def git_root_or_die():
-    try:
-        return git("rev-parse --show-toplevel").stdout.strip("\n")
-    except subprocess.CalledProcessError:
-        sys.exit(1)
-
-
-# Return the path a certain branch is checked out at
-# or None.
-def git_worktree_get_checkout_path(root, branch):
-    state = dict()
-    out = git(f"-C {root} worktree list --porcelain").stdout.split("\n")
-    path = None
-
-    for l in out:
-        if not l:
-            # end block
-            if state.get("branch", None) == "refs/heads/" + branch:
-                path = op.realpath(state["worktree"])
-                break
-
-            state = dict()
-            continue
-
-        v = l.split(" ")
-        state[v[0]] = v[1] if len(v) > 1 else None
-
-    # make sure `git worktree list` is in sync with reality
-    if not path or not op.isdir(path):
-        return None
-
-    return path
-
-
-# Get the git dir (aka .git) directory for the worktree related to
-# the @path. @path defaults to CWD
-def git_worktree_get_git_dir(path="."):
-    return git(f"-C {path} rev-parse --git-dir").stdout.strip("\n")
-
-
-@contextmanager
-def git_split_index(path="."):
-    if Config.per_worktree():
-        config_cmd = "config --worktree"
-    else:
-        config_cmd = "config"
-
-    # only change if not explicitely configure in config
-    change_split_index = git_can_fail(f"-C {path} {config_cmd} --get core.splitIndex").returncode != 0
-
-    if not change_split_index:
-        try:
-            yield
-        finally:
-            return
-
-    change_shared_index_expire = git_can_fail(f"-C {path} {config_cmd} --get splitIndex.sharedIndexExpire").returncode != 0
-
-    try:
-        git(f"-C {path} update-index --split-index")
-        if change_shared_index_expire:
-            git(f"-C {path} {config_cmd} splitIndex.sharedIndexExpire now")
-
-        yield
-    finally:
-        git(f"-C {path} update-index --no-split-index")
-        if change_shared_index_expire:
-            git(f"-C {path} {config_cmd} --unset splitIndex.sharedIndexExpire")
 
 
 def update_baseline(d, commit):
@@ -214,24 +123,6 @@ def assert_valid_result_branch(result_branch, baseline):
 
     if out != baseline:
         fatal(f"branch '{result_branch}' does not contain baseline {baseline}")
-
-
-# Create a temporary directory to checkout a detached branch with git-worktree
-# making sure it gets deleted (both the directory and from git-worktree) when
-# we finished using it.
-#
-# To be used in `with` context handling.
-@contextmanager
-def temporary_worktree(commit, dir, prefix="git-pile-worktree"):
-    class Break(Exception):
-        """Break out of the with statement"""
-
-    try:
-        with tempfile.TemporaryDirectory(dir=dir, prefix=prefix) as d:
-            git(f"worktree add --detach --checkout {d} {commit}", stdout=nul_f, stderr=nul_f)
-            yield d
-    finally:
-        git(f"worktree remove {d}")
 
 
 class InitCmd(PileCommand):
@@ -1230,10 +1121,6 @@ or permanently in the git configuration file of the local repo."""
         )
 
 
-def git_ref_is_ancestor(ancestor, ref):
-    return git_can_fail(f"merge-base --is-ancestor {ancestor} {ref}").returncode == 0
-
-
 def check_baseline_is_ancestor(baseline, ref):
     if not git_ref_is_ancestor(baseline, ref):
         fatal(
@@ -1552,7 +1439,7 @@ option to this command."""
 
         # get a simple diff of all the changes to attach to the coverletter filtered by the
         # output of git-range-diff
-        with temporary_worktree(config.pile_branch, root) as tmpdir:
+        with git_temporary_worktree(config.pile_branch, root) as tmpdir:
             ret = genpatches(tmpdir, newbaseline, newref)
             if ret != 0:
                 return 1
@@ -1639,7 +1526,7 @@ option to this command."""
             )
 
         if compose:
-            editor = get_git_editor()
+            editor = git_get_editor()
             # according to git-var(1), the value is meant to be interpreted by the
             # shell when it is used. Examples: ~/bin/vi, $SOME_ENVIRONMENT_VARIABLE,
             # "C:\Program Files\Vim\gvim.exe" --nofork.
@@ -1830,7 +1717,7 @@ pile patches."""
 
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
-    with temporary_worktree(effective_baseline, root) as d:
+    with git_temporary_worktree(effective_baseline, root) as d:
         branch = args.branch if args.branch else config.result_branch
         path = git_worktree_get_checkout_path(root, branch)
 
@@ -1842,7 +1729,7 @@ pile patches."""
             git(["-C", d] + apply_cmd + patchlist, stdout=stdout, stderr=stderr)
 
         if args.dirty:
-            raise temporary_worktree.Break
+            raise git_temporary_worktree.Break
 
         if cache:
             cache.update(pile_for_cache, "HEAD")
@@ -2041,7 +1928,7 @@ class GenlinearBranchCmd(PileCommand):
             info("Nothing to do.")
             return 0
 
-        with temporary_worktree(refs[0], root) as piledir:
+        with git_temporary_worktree(refs[0], root) as piledir:
             # we have to checkout something in the directory we are going to
             # genbranch in order to please git-worktree. However this is just a
             # place to dump intermediate state that we are continuously resetting.
@@ -2049,7 +1936,7 @@ class GenlinearBranchCmd(PileCommand):
             # exist. In that case, just checkout anything, we are going to reset
             # to a new commit as the first thing anyway
             commit = Pile(path=piledir).baseline() or refs[0]
-            with temporary_worktree(commit, root) as resultdir:
+            with git_temporary_worktree(commit, root) as resultdir:
                 last_good_ref = None
                 tree = "tree " + git(f"log --format=%T -1 {parent_ref}").stdout.strip() if parent_ref else None
 
