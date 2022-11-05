@@ -16,7 +16,7 @@ import pickle
 import subprocess
 import tempfile
 
-from . import helpers
+from .helpers import git
 
 
 class GenbranchCache:
@@ -47,7 +47,7 @@ class GenbranchCache:
         self.__cache_data = _CacheData.load(self.__path)
 
         if not committer_ident:
-            committer_ident = _git(["var", "GIT_COMMITTER_IDENT"]).stdout
+            committer_ident = git(["var", "GIT_COMMITTER_IDENT"]).stdout
         # Drop the date information from committer_ident
         self.__committer_ident = committer_ident.strip().rsplit(maxsplit=2)[0]
 
@@ -107,7 +107,7 @@ class GenbranchCache:
         while base < head:
             i = (base + head + 1) // 2
             try:
-                _git(["cat-file", "-e", nodes[i].commit], stderr=subprocess.DEVNULL)
+                git(["cat-file", "-e", nodes[i].commit], stderr=subprocess.DEVNULL)
             except subprocess.CalledProcessError:
                 head = i - 1
             else:
@@ -125,7 +125,7 @@ class GenbranchCache:
         """
         baseline = pile.baseline()
         series_hashes = (p.sha1() for p in pile.series())
-        commits = _git(["rev-list", "--reverse", f"{baseline}..{head}"]).stdout.splitlines()
+        commits = git(["rev-list", "--reverse", f"{baseline}..{head}"]).stdout.splitlines()
 
         if baseline not in self.__root.children:
             self.__root.children[baseline] = _Node(baseline)
@@ -146,7 +146,6 @@ class GenbranchCache:
         self.__cache_data.save(pathlib.Path(path or self.__path))
 
 
-_git = helpers.run_wrapper("git", capture=True)
 _logger = logging.getLogger(__name__)
 
 

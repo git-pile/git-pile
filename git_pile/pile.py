@@ -26,7 +26,10 @@ import collections
 import pathlib
 import subprocess
 
-from . import helpers
+from .helpers import (
+    git,
+    warn,
+)
 
 
 class Pile:
@@ -101,7 +104,7 @@ class Pile:
             raise PileError(f"missing files in {self.__loc_phrase()}: {missing_files_str}")
 
         if has_non_patches and warn_non_patches:
-            helpers.warn(f"non-patch files found in {self.__loc_phrase()}")
+            warn(f"non-patch files found in {self.__loc_phrase()}")
 
     def baseline(self):
         """
@@ -172,9 +175,6 @@ class PileError(Exception):
     pass
 
 
-_git = helpers.run_wrapper("git", capture=True)
-
-
 class _FileReader(abc.ABC):
     """
     Abstract class to provide "file-reading" functionality to the ``Pile`` class.
@@ -235,11 +235,11 @@ class _PathReader(_FileReader):
         return self.__path.joinpath(*path).read_text()
 
     def sha1(self, *path):
-        return _git(["hash-object", "--", str(self.__path.joinpath(*path))]).stdout.strip()
+        return git(["hash-object", "--", str(self.__path.joinpath(*path))]).stdout.strip()
 
     def __filter_git_ignored(self, path_iter):
         try:
-            _git(["-C", str(self.__path), "rev-parse", "--show-toplevel"])
+            git(["-C", str(self.__path), "rev-parse", "--show-toplevel"])
         except subprocess.CalledProcessError:
             yield from path_iter
 
@@ -247,7 +247,7 @@ class _PathReader(_FileReader):
 
         try:
             ignored = set(
-                _git(
+                git(
                     ["-C", str(self.__path), "check-ignore", "--stdin", "-z"],
                     text=True,
                     input="\x00".join(names),
@@ -288,7 +288,7 @@ class _RevReader(_FileReader):
         self.__ls_path(path)
         gitpath = "/".join(path)
         revspec = f"{self.__rev}:{gitpath}"
-        return _git(["show", revspec]).stdout
+        return git(["show", revspec]).stdout
 
     def sha1(self, *path):
         _, _, sha1 = self.__ls_path(path)
@@ -322,7 +322,7 @@ class _RevReader(_FileReader):
             cmd.append(gitpath)
 
         info = collections.OrderedDict()
-        for entry in _git(cmd).stdout.rstrip("\x00").split("\x00"):
+        for entry in git(cmd).stdout.rstrip("\x00").split("\x00"):
             _, objecttype, sha1, name = entry.split(maxsplit=3)
             info[name] = name, objecttype, sha1
 

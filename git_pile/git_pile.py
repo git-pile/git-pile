@@ -21,8 +21,11 @@ from .cli import PileCLI, PileCommand
 from .helpers import (
     error,
     fatal,
+    git,
+    git_can_fail,
     info,
     log_enable_color,
+    nul_f,
     open_or_stdin,
     orderedset,
     prompt_yesno,
@@ -39,13 +42,6 @@ try:
 except ImportError:
     warn("can't find python3-argcomplete: argument completion won't be available")
     pass
-
-
-# external commands
-git = run_wrapper("git", capture=True)
-git_can_fail = run_wrapper("git", capture=True, check=False)
-
-nul_f = open(os.devnull, "w")
 
 
 def log10_or_zero(n):
