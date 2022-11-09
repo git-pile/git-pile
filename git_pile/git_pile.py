@@ -1637,10 +1637,26 @@ option to this command."""
         if oldbaseline != newbaseline:
             args.no_full_patch = True
 
-        creation_factor = f"--creation-factor={args.creation_factor}" if args.creation_factor else ""
-        range_diff_commits = git(
-            f"range-diff --no-color --no-patch {creation_factor} {oldbaseline}..{oldref} {newbaseline}..{newref}"
-        ).stdout.split("\n")
+        range_diff_old, range_diff_new = f"{oldbaseline}..{oldref}", f"{newbaseline}..{newref}"
+        range_diff_old_empty = git(["rev-list", "--count", range_diff_old]).stdout.strip() == "0"
+        range_diff_new_empty = git(["rev-list", "--count", range_diff_new]).stdout.strip() == "0"
+
+        if range_diff_old_empty and range_diff_new_empty:
+            range_diff_commits = []
+        else:
+            # git range-diff breaks if one of the ranges are empty, so we need
+            # the workaround below to make it work.
+            if range_diff_old_empty:
+                range_diff_old = f"{newbaseline}^..{newbaseline}"
+                range_diff_new = f"{newbaseline}^..{newref}"
+            elif range_diff_new_empty:
+                range_diff_old = f"{oldbaseline}^..{oldref}"
+                range_diff_new = f"{oldbaseline}^..{oldbaseline}"
+
+            creation_factor = f"--creation-factor={args.creation_factor}" if args.creation_factor else ""
+            range_diff_commits = git(
+                f"range-diff --no-color --no-patch {creation_factor} {range_diff_old} {range_diff_new}"
+            ).stdout.split("\n")
 
         c_commits, a_commits, d_commits, diff_filter_list = _parse_range_diff(range_diff_commits)
 

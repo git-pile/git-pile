@@ -75,3 +75,37 @@ add_commits_and_format_patch() {
   range_diff=$(git range-diff -s $dev_tip... | sed "/^[0-9]\+:\s\+[0-9a-f]\+ =/d")
   [ "$range_diff" = "" ]
 }
+
+@test "empty-old-range" {
+  echo "pile 1" > j.txt && git add j.txt && git commit -m "1st commit"
+  echo "pile 2" > j.txt && git add j.txt && git commit -m "2nd commit"
+  git pile format-patch -o "$BATS_TEST_TMPDIR/format-patch-out"
+  git pile am "$BATS_TEST_TMPDIR/format-patch-out/0000-cover-letter.patch"
+
+  actual=$(cd "$BATS_TEST_TMPDIR/format-patch-out" && echo *)
+  expected="0000-cover-letter.patch 0001-1st-commit.patch 0002-2nd-commit.patch 0003-full-tree-diff.patch"
+  [ "$actual" = "$expected" ]
+
+  actual=$(cat "$(git config pile.dir)/series" | sed '/^#\|^$/d')
+  expected=$'0001-1st-commit.patch\n0001-2nd-commit.patch'
+  [ "$actual" = "$expected" ]
+}
+
+@test "empty-new-range" {
+  echo "pile 1" > j.txt && git add j.txt && git commit -m "1st commit"
+  echo "pile 2" > j.txt && git add j.txt && git commit -m "2nd commit"
+  git pile genpatches -c -m "First pile commit"
+  git push origin --all
+
+  git reset --hard $(git pile baseline)
+  git pile format-patch -o "$BATS_TEST_TMPDIR/format-patch-out"
+  git pile am "$BATS_TEST_TMPDIR/format-patch-out/0000-cover-letter.patch"
+
+  actual=$(cd "$BATS_TEST_TMPDIR/format-patch-out" && echo *)
+  expected="0000-cover-letter.patch 0001-full-tree-diff.patch"
+  [ "$actual" = "$expected" ]
+
+  actual=$(cat "$(git config pile.dir)/series" | sed '/^#\|^$/d')
+  expected=""
+  [ "$actual" = "$expected" ]
+}
