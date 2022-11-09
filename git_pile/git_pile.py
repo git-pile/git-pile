@@ -878,9 +878,7 @@ range-diff:
     return cover_path
 
 
-def gen_full_tree_patch(
-    output_dir, reroll_count_str, n_patches, oldbaseline, newbaseline, oldref, newref, subject_prefix, add_header
-):
+def gen_full_tree_patch(output_dir, reroll_count_str, n_patches, oldref, newref, subject_prefix, add_header):
     user = git("config --get user.name").stdout.strip()
     email = git("config --get user.email").stdout.strip()
     # RFC 2822-compliant date format
@@ -1730,8 +1728,6 @@ option to this command."""
                 output,
                 reroll_count_str,
                 n_patches,
-                oldbaseline,
-                newbaseline,
                 oldref,
                 newref,
                 subject_prefix,
