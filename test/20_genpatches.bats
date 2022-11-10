@@ -16,6 +16,12 @@ setup() {
 
 @test "genpatches-no-commits" {
   git pile genpatches
+
+  series=$(cat "$(git config pile.dir)/series" | sed '/^#\|^$/d')
+  [ "$series" = "" ]
+
+  patches=($(find patches -name '*.patch'))
+  [ ${#patches[@]} -eq 0 ]
 }
 
 @test "genpatches-1-commit" {

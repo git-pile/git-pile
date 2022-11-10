@@ -632,7 +632,8 @@ def generate_series_list(commit_range, suffix):
     else:
         single_arg = ["-1"]
 
-    series = git(["log", "--format=%f", "--reverse", *single_arg, commit_range]).stdout.strip().split("\n")
+    out = git(["log", "--format=%f", "--reverse", *single_arg, commit_range]).stdout.strip()
+    series = out.splitlines() if out else []
     # truncate name as per output of git-format-patch
     series = [x[0:52] for x in series]
     series = fix_duplicate_patch_names(series)
