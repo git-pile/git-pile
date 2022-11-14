@@ -208,3 +208,8 @@ def pushdir(d, oldd):
         yield
     finally:
         os.chdir(oldd)
+
+
+git = run_wrapper("git", capture=True)
+git_can_fail = run_wrapper("git", capture=True, check=False)
+nul_f = open(os.devnull, "w")
