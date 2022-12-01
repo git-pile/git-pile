@@ -5,8 +5,8 @@
 import git_pile.git_pile as git_pile
 import sys
 
-if sys.version_info < (3, 6):
-    sys.exit("Sorry, we need at least Python 3.6.x")
+if sys.version_info < (3, 7):
+    sys.exit("Sorry, we need at least Python 3.7.x")
 
 if __name__ == "__main__":
     sys.exit(git_pile.main(*sys.argv[1:]))

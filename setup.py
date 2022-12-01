@@ -12,8 +12,8 @@ import sys
 HERE = pathlib.Path(__file__).parent
 README = (HERE / "README.md").read_text()
 
-if sys.version_info < (3, 6):
-    sys.exit("Sorry, we need at least Python 3.6.x")
+if sys.version_info < (3, 7):
+    sys.exit("Sorry, we need at least Python 3.7.x")
 
 # installing to user dir or inside virtualenv
 if ("install" in sys.argv and "--user" in sys.argv) or sys.base_prefix != sys.prefix:
