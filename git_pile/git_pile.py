@@ -201,7 +201,9 @@ class InitCmd(PileCommand):
 
         # checkout pile branch as a new worktree
         try:
-            git(f"worktree add --checkout {config.dir} {config.pile_branch}", stdout=nul_f, stderr=nul_f)
+            # dir/, with one extra slash to make it compatible with older git versions (e.g. 2.25),
+            # that would fail otherwise
+            git(f"worktree add --checkout {config.dir}/ {config.pile_branch}", stdout=nul_f, stderr=nul_f)
         except:
             config.revert(oldconfig)
             fatal(f"failed to checkout worktree at {config.dir}")
@@ -356,7 +358,9 @@ class SetupCmd(PileCommand):
         if need_worktree:
             # checkout pile branch as a new worktree
             try:
-                git(f"-C {gitroot} worktree add --checkout {args.dir} {local_pile_branch}", stdout=nul_f, stderr=nul_f)
+                # dir/, with one extra slash to make it compatible with older git versions (e.g. 2.25),
+                # that would fail otherwise
+                git(f"-C {gitroot} worktree add --checkout {args.dir}/ {local_pile_branch}", stdout=nul_f, stderr=nul_f)
             except:
                 fatal(f"failed to checkout worktree for '{local_pile_branch}' at {args.dir}")
 
