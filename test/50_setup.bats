@@ -60,6 +60,20 @@ setup() {
   [ "$(git rev-parse pile)" = "$pile_head" ]
   [ "$(git rev-parse internal)" = "$internal_head" ]
 
+  # First, test a pile setup with a trailing slash - some git versions have
+  # issues without a slash, so let's make sure it works with the double slashes
+  # that will result on calls to git-worktree add
+  git worktree add ../testrepo2-next HEAD
+  pushd ../testrepo2-next
+  git pile setup -d patches/ origin/pile-next origin/internal-next
+  git checkout internal-next
+  [ "$(git rev-parse pile-next)" = "$pile_next_head" ]
+  [ "$(git rev-parse internal-next)" = "$internal_next_head" ]
+  popd
+  rm -r ../testrepo2-next
+
+  # remove the new worktrees, try again with no additional dir arg
+  git worktree prune
   git worktree add ../testrepo2-next HEAD
   pushd ../testrepo2-next
   git pile setup origin/pile-next origin/internal-next
