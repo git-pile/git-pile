@@ -4,7 +4,14 @@ Module providing the ``Config`` class, which is responsible for handling
 git-pile configuration.
 """
 
-from .gitutil import git_worktree_config_extension_enabled
+import os.path as op
+
+from .gitutil import (
+    git_worktree_config_extension_enabled,
+    git_root_or_die,
+    git_worktree_list,
+)
+
 from .helpers import (
     error,
     git,
@@ -32,6 +39,17 @@ class Config:
     __attr_doc_genbranch_cache_path = "(path): Path (relative to the .git dir) to the cache file for genbranch"
 
     def __init__(self):
+        if git_worktree_config_extension_enabled():
+            self.write = run_wrapper(["git", "config", "--worktree"], capture=True)
+        else:
+            self.write = run_wrapper(["git", "config"], capture=True)
+
+        # assume the call is from main worktree, where the result-branch is
+        # normally checkout
+        self._load_config_values(git_root_or_die())
+
+    def _load_config_values(self, root):
+        self.root = root
         self.dir = ""
         self.linear_branch = ""
         self.result_branch = ""
@@ -45,14 +63,8 @@ class Config:
         self.genbranch_user_email = None
         self.genbranch_use_cache = True
         self.genbranch_cache_path = "pile-genbranch-cache.pickle"
-        self.write = None
 
-        if git_worktree_config_extension_enabled():
-            self.write = run_wrapper(["git", "config", "--worktree"], capture=True)
-        else:
-            self.write = run_wrapper(["git", "config"], capture=True)
-
-        s = git(["config", "--get-regexp", "^pile\\.*"], check=False, stderr=nul_f).stdout.strip()
+        s = git(f"-C {root} config --get-regexp ^pile\\.*", check=False, stderr=nul_f).stdout.strip()
         if not s:
             return
 
@@ -72,6 +84,28 @@ class Config:
                 setattr(self, key, value)
             except:
                 warn(f"could not set {key}={value} from git config")
+
+    def normalize(self, root):
+        worktrees = git_worktree_list(root)
+
+        # usual situation: the call is from main worktree where the result branch
+        # is normally checkout - config is already loaded correctly and both root
+        # and root / config.dir are in the list of worktrees
+        pile_worktree = op.realpath(op.join(root, self.dir))
+        worktree = op.realpath(root)
+        if worktree in worktrees and pile_worktree in worktrees:
+            self.root = root
+            return root
+
+        # try the opposite: assume root is actually the pile checkout, reload config
+        pile_worktree = worktree
+        for w in worktrees:
+            pile_dir = git(f"-C {w} config --get pile.dir", check=False, stderr=nul_f).stdout.strip()
+            if pile_worktree == op.realpath(op.join(w, pile_dir)):
+                self._load_config_values(w)
+                return w
+
+        return None
 
     def _value_to_bool(self, value):
         return value is None or value.lower() in ["yes", "on", "true", "1"]

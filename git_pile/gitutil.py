@@ -145,3 +145,9 @@ def git_worktree_get_checkout_path(root, branch):
 # the @path. @path defaults to CWD
 def git_worktree_get_git_dir(path="."):
     return git(f"-C {path} rev-parse --git-dir").stdout.strip("\n")
+
+
+def git_worktree_list(root):
+    out = git(f"-C {root} worktree list --porcelain").stdout.splitlines()
+    ret = tuple(op.realpath(s.split(maxsplit=1)[1]) for s in out if s.startswith("worktree"))
+    return ret

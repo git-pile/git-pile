@@ -13,7 +13,6 @@ from .config import Config
 from .cli import PileCommand
 from .genbranch_caching import GenbranchCache
 from .gitutil import (
-    git_root_or_die,
     git_split_index,
     git_temporary_worktree,
     git_worktree_get_checkout_path,
@@ -32,7 +31,7 @@ from .helpers import (
 from .pile import Pile
 
 
-def genbranch(root, patchesdir, config, args):
+def genbranch(patchesdir, config, args):
     if not config.check_is_valid():
         return 1
 
@@ -165,9 +164,9 @@ pile patches."""
 
     # work in a separate directory to avoid cluttering whatever the user is doing
     # on the main one
-    with git_temporary_worktree(effective_baseline, root) as d:
+    with git_temporary_worktree(effective_baseline, config.root) as d:
         branch = args.branch if args.branch else config.result_branch
-        path = git_worktree_get_checkout_path(root, branch)
+        path = git_worktree_get_checkout_path(config.root, branch)
 
         if path and not args.force:
             error(f"can't use branch '{branch}' because it is checked out at '{path}'")
@@ -339,10 +338,9 @@ class GenbranchCmd(PileCommand):
     def run(self):
         args = self.args
         config = self.config
-        root = git_root_or_die()
         if args.external_pile:
             patchesdir = args.external_pile
         else:
             patchesdir = op.join(config.root, config.dir)
 
-        return genbranch(root, patchesdir, config, args)
+        return genbranch(patchesdir, config, args)
