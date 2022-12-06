@@ -12,6 +12,7 @@ jobs:
     strategy:
       matrix:
         python-version: [ '3.7', '3.9', '3.10' ]
+
     steps:
       - uses: actions/checkout@v3
 
@@ -65,6 +66,11 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/git-pile/builder:test
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.github_token }}
     strategy:
       matrix:
         python-version: [ '3.7', '3.9', '3.10' ]
@@ -76,10 +82,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes bats
+      - name: Export PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - uses: actions/checkout@v3
         with:
@@ -97,5 +101,19 @@ jobs:
           git config --global user.email "ci@git-pile.github.io"
           git config --global init.defaultBranch master
 
-      - name: Run tests
-        run: bats --print-output-on-failure --show-output-of-passing-tests --tap -T test
+      - name: Run tests (git from distro)
+        run: |
+          git --version
+          bats --print-output-on-failure --show-output-of-passing-tests --tap -T test
+
+      - name: Run tests (git v2.25.x)
+        run: |
+          export PATH=/usr/local/git-2.25.x:$PATH
+          git --version
+          bats --print-output-on-failure --show-output-of-passing-tests --tap -T test
+
+      - name: Run tests (git v2.38.x)
+        run: |
+          export PATH=/usr/local/git-2.38.x:$PATH
+          git --version
+          bats --print-output-on-failure --show-output-of-passing-tests --tap -T test
