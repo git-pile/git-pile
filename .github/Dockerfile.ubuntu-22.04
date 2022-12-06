@@ -1,0 +1,17 @@
+FROM ubuntu:22.04
+RUN echo 'APT::Install-Suggests "0";' >> /etc/apt/apt.conf.d/00-docker
+RUN echo 'APT::Install-Recommends "0";' >> /etc/apt/apt.conf.d/00-docker
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        git python3 python3-pip \
+        build-essential libssl-dev zlib1g-dev libcurl4-openssl-dev libexpat-dev gettext coreutils && \
+  pip install flake8
+ENV GIT_VERSIONS="v2.38.1 v2.25.5"
+RUN git clone https://github.com/git/git && cd git && \
+  for v in $GIT_VERSIONS; do \
+    git checkout $v && \
+    vv=${v%.*}.x && \
+    NO_TCLTK=1 make prefix=/usr/local/git-$vv -j$(nproc) && \
+    NO_TCLTK=1 make prefix=/usr/local/git-$vv install; \
+  done && cd - && rm -rf git
+LABEL org.opencontainers.image.source=https://github.com/git-pile/git-pile
