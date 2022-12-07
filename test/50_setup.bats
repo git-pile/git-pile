@@ -7,20 +7,8 @@ setup_file() {
   create_simple_repo $BATS_FILE_TMPDIR/testrepo
 }
 
-add_pile_commits() {
-  local n_commits=$1
-  local fn_number=$2
-
-  for (( i=0; i < n_commits; i++, fn_number++ )); do
-    fn="foo${fn_number}.txt"
-    touch $fn
-    git add $fn
-    git commit -m "Add $fn"
-    git pile genpatches -m "Add patch adding $fn"
-  done
-}
-
 setup() {
+  load common.bash
   git clone --bare "$BATS_FILE_TMPDIR/testrepo" "$BATS_TEST_TMPDIR/remoterepo"
 
   git clone "$BATS_TEST_TMPDIR/remoterepo" "$BATS_TEST_TMPDIR/testrepo"
@@ -30,13 +18,6 @@ setup() {
 
   add_pile_commits 3 1
   git push origin -u --all
-}
-
-# continuation to setup() above, for tests that need it
-setup_second_pile() {
-  local suffix=$1
-  add_pile_commits 1 10
-  git push origin pile:pile${suffix} internal:internal${suffix}
 }
 
 @test "setup" {
