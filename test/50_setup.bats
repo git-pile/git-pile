@@ -32,6 +32,13 @@ setup() {
   git push origin -u --all
 }
 
+# continuation to setup() above, for tests that need it
+setup_second_pile() {
+  local suffix=$1
+  add_pile_commits 1 10
+  git push origin pile:pile${suffix} internal:internal${suffix}
+}
+
 @test "setup" {
   git clone "$BATS_TEST_TMPDIR/remoterepo" "$BATS_TEST_TMPDIR/testrepo2"
   pushd "$BATS_TEST_TMPDIR/testrepo2"
@@ -41,43 +48,47 @@ setup() {
 }
 
 @test "setup-multiple-pile" {
-  git pile setup origin/pile origin/internal
-  pile_head=$(git rev-parse pile)
-  internal_head=$(git rev-parse internal)
-
-  add_pile_commits 1 10
-
-  git push origin pile:pile-next internal:internal-next
-  pile_next_head=$(git rev-parse pile)
-  internal_next_head=$(git rev-parse internal)
-  git pile reset
+  setup_second_pile -next
 
   git clone "$BATS_TEST_TMPDIR/remoterepo" "$BATS_TEST_TMPDIR/testrepo2"
   pushd "$BATS_TEST_TMPDIR/testrepo2"
+
   # requirement for working with multiple piles
   git config extensions.worktreeConfig true
   git pile setup origin/pile origin/internal
-  [ "$(git rev-parse pile)" = "$pile_head" ]
-  [ "$(git rev-parse internal)" = "$internal_head" ]
 
-  # First, test a pile setup with a trailing slash - some git versions have
-  # issues without a slash, so let's make sure it works with the double slashes
-  # that will result on calls to git-worktree add
-  git worktree add ../testrepo2-next HEAD
-  pushd ../testrepo2-next
-  git pile setup -d patches/ origin/pile-next origin/internal-next
-  git checkout internal-next
-  [ "$(git rev-parse pile-next)" = "$pile_next_head" ]
-  [ "$(git rev-parse internal-next)" = "$internal_next_head" ]
-  popd
-  rm -r ../testrepo2-next
-
-  # remove the new worktrees, try again with no additional dir arg
-  git worktree prune
   git worktree add ../testrepo2-next HEAD
   pushd ../testrepo2-next
   git pile setup origin/pile-next origin/internal-next
   git checkout internal-next
-  [ "$(git rev-parse pile-next)" = "$pile_next_head" ]
-  [ "$(git rev-parse internal-next)" = "$internal_next_head" ]
+
+  [ "$(git rev-parse pile)" = "$(git rev-parse origin/pile)" ]
+  [ "$(git rev-parse internal)" = "$(git rev-parse origin/internal)" ]
+  [ "$(git rev-parse pile-next)" = "$(git rev-parse origin/pile-next)" ]
+  [ "$(git rev-parse internal-next)" = "$(git rev-parse origin/internal-next)" ]
+}
+
+# same thing as setup-multiple-pile, but use a trailing slash when setting up the pile
+# and make sure git-pile can work with it. some git versions (e.g. 2.25) have
+# issues without a slash, so git-pile automatically adds one. Let's make sure
+# if we have a double slash on commands to git-worktree add it still works
+@test "setup-multiple-pile-trailing-slash" {
+  setup_second_pile -next
+
+  git clone "$BATS_TEST_TMPDIR/remoterepo" "$BATS_TEST_TMPDIR/testrepo2"
+  pushd "$BATS_TEST_TMPDIR/testrepo2"
+
+  # requirement for working with multiple piles
+  git config extensions.worktreeConfig true
+  git pile setup origin/pile origin/internal
+
+  git worktree add ../testrepo2-next HEAD
+  pushd ../testrepo2-next
+  git pile setup -d patches/ origin/pile-next origin/internal-next
+  git checkout internal-next
+
+  [ "$(git rev-parse pile)" = "$(git rev-parse origin/pile)" ]
+  [ "$(git rev-parse internal)" = "$(git rev-parse origin/internal)" ]
+  [ "$(git rev-parse pile-next)" = "$(git rev-parse origin/pile-next)" ]
+  [ "$(git rev-parse internal-next)" = "$(git rev-parse origin/internal-next)" ]
 }
