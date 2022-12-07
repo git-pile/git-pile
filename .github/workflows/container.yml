@@ -1,0 +1,44 @@
+name: builder-container
+
+on:
+  push:
+    branches: [ ci, master ]
+    path:
+      - '.github/workflows/container.yml'
+      - '.github/Dockerfile.ubuntu-22.04'
+  workflow_dispatch:
+    inputs:
+      git-ref:
+        description: Git Ref (Optional)
+        required: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: builder
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build image
+        id: build
+        run: |
+          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME
+          # Strip git ref prefix from version
+          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+          [ "$VERSION" == "master" ] && TAG=latest
+          [ "$VERSION" == "ci" ] && TAG=test
+          docker build .github/ --file .github/Dockerfile.ubuntu-22.04 --tag $IMAGE_ID:$TAG --label "runnumber=${GITHUB_RUN_ID}"
+          echo "::set-output name=image::$IMAGE_ID:$TAG"
+
+      - name: Log in to the Container registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
+
+      - name: Push image
+        run: docker push ${{ steps.build.outputs.image }}
