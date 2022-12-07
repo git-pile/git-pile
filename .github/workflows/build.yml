@@ -101,6 +101,15 @@ jobs:
           git config --global user.email "ci@git-pile.github.io"
           git config --global init.defaultBranch master
 
+      # User in the container will be root, but the cloned repo is owned by the
+      # user running github-runner. Git doesn't like that as the repo will then
+      # be unusable by the owner:  we don't care about it since this is only
+      # used for running these tests.
+      #
+      # See https://github.com/actions/runner/issues/2033
+      - name: Workaround directory permissions
+        run: git config --global --add safe.directory $PWD
+
       - name: Run tests (git from distro)
         run: |
           git --version
