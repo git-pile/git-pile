@@ -4,10 +4,10 @@ Module providing the ``Config`` class, which is responsible for handling
 git-pile configuration.
 """
 
+from .gitutil import git_worktree_config_extension_enabled
 from .helpers import (
     error,
     git,
-    git_can_fail,
     nul_f,
     run_wrapper,
     warn,
@@ -31,10 +31,6 @@ class Config:
     __attr_doc_genbranch_use_cache = "(bool): Use cached information to avoid recreating commits"
     __attr_doc_genbranch_cache_path = "(path): Path (relative to the .git dir) to the cache file for genbranch"
 
-    @classmethod
-    def per_worktree(cls):
-        return git_can_fail("config --get --bool extensions.worktreeConfig", stderr=nul_f).stdout.strip() == "true"
-
     def __init__(self):
         self.dir = ""
         self.linear_branch = ""
@@ -51,7 +47,7 @@ class Config:
         self.genbranch_cache_path = "pile-genbranch-cache.pickle"
         self.write = None
 
-        if Config.per_worktree():
+        if git_worktree_config_extension_enabled():
             self.write = run_wrapper(["git", "config", "--worktree"], capture=True)
         else:
             self.write = run_wrapper(["git", "config"], capture=True)

@@ -10,7 +10,6 @@ import subprocess
 import sys
 import tempfile
 
-from .config import Config
 from .helpers import (
     git,
     git_can_fail,
@@ -65,7 +64,7 @@ def git_root_or_die():
 
 @contextlib.contextmanager
 def git_split_index(path="."):
-    if Config.per_worktree():
+    if git_worktree_config_extension_enabled():
         config_cmd = "config --worktree"
     else:
         config_cmd = "config"
@@ -109,6 +108,10 @@ def git_temporary_worktree(commit, dir, prefix="git-pile-worktree"):
             yield d
     finally:
         git(f"worktree remove {d}")
+
+
+def git_worktree_config_extension_enabled():
+    return git_can_fail("config --get --bool extensions.worktreeConfig", stderr=nul_f).stdout.strip() == "true"
 
 
 # Return the path a certain branch is checked out at
