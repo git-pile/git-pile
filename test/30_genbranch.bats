@@ -2,7 +2,7 @@
 
 setup_file() {
   bats_require_minimum_version 1.7.0
-  load 'common'
+  load common.bash
 
   create_simple_repo $BATS_FILE_TMPDIR/testrepo
 }
