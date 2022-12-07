@@ -31,7 +31,7 @@ setup() {
   rev0=$(git rev-parse HEAD)
 
   git pile genpatches -o untracked-output-dir
-  git -c pile.dir=untracked-output-dir pile genbranch -i
+  git pile genbranch -e untracked-output-dir -i
 
   rev1=$(git rev-parse HEAD)
   [ "$(git diff $rev0..$rev1)" = "" ]

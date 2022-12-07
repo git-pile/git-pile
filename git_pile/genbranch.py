@@ -291,6 +291,7 @@ class GenbranchCmd(PileCommand):
         self.parser.add_argument(
             "-q", "--quiet", help="Quiet mode - do not print list of patches", action="store_true", default=False
         )
+        self.parser.add_argument("-e", "--external-pile", help="Use external pile dir as input", default=None)
         self.parser.add_argument(
             "-i",
             "--inplace",
@@ -339,5 +340,9 @@ class GenbranchCmd(PileCommand):
         args = self.args
         config = self.config
         root = git_root_or_die()
-        patchesdir = op.join(root, config.dir)
+        if args.external_pile:
+            patchesdir = args.external_pile
+        else:
+            patchesdir = op.join(config.root, config.dir)
+
         return genbranch(root, patchesdir, config, args)
