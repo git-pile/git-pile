@@ -18,7 +18,7 @@ env:
 
 jobs:
   build-and-push-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       contents: read
       packages: write
@@ -35,7 +35,7 @@ jobs:
           [ "$VERSION" == "master" ] && TAG=latest
           [ "$VERSION" == "ci" ] && TAG=test
           docker build .github/ --file .github/Dockerfile.ubuntu-22.04 --tag $IMAGE_ID:$TAG --label "runnumber=${GITHUB_RUN_ID}"
-          echo "::set-output name=image::$IMAGE_ID:$TAG"
+          echo "image=$IMAGE_ID:$TAG" >> $GITHUB_OUTPUT
 
       - name: Log in to the Container registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
