@@ -6,7 +6,19 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
         git python3 python3-pip \
         build-essential libssl-dev zlib1g-dev libcurl4-openssl-dev libexpat-dev gettext coreutils && \
   pip install flake8
-ENV GIT_VERSIONS="v2.38.1 v2.25.5"
+
+# 2.38.x: latest available version / Rolling distros / Fedora 36 and 37
+# 2.31.x: Rocky Linux 8 and 9
+# 2.36.x: Alpine
+# 2.35.x: openSUSE 15.4
+# 2.34.x: Ubuntu 22.04
+# 2.31.x: Rocky Linux 8 and 9 / AlmaLinux 8 and 9 / CentOS 9 Stream
+# 2.30.x: Debian 11
+# 2.27.x: CentOS 8 / CentOS 8 Stream
+# 2.26.x: openSUSE 15.3
+# 2.25.x: Ubuntu 20.04
+# 2.20.x: Debian 10
+ENV GIT_VERSIONS="v2.38.1 v2.25.5 v2.20.5"
 RUN git clone https://github.com/git/git && cd git && \
   for v in $GIT_VERSIONS; do \
     git checkout $v && \
