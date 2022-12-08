@@ -28,6 +28,6 @@ create_simple_repo() {
   popd
 }
 
-if [[ -n $COVERAGE ]]; then
+if [[ -n $COVERAGE ]] && ! [[ "$PATH" =~ (^|:)"$BATS_TEST_DIRNAME/coverage-shim"(:|$) ]]; then
     export PATH="$BATS_TEST_DIRNAME/coverage-shim:$PATH"
 fi
