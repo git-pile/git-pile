@@ -127,18 +127,18 @@ jobs:
       - name: Run tests (git v2.25.x)
         if: always()
         run: |
-          export PATH=/usr/local/git-2.25.x:$PATH
+          export PATH=/usr/local/git-v2.25.x/bin:$PATH
           git --version
-          echo "TAP version 13\r" > git-2.25.tap
-          bats --tap -T test | tee -a git-2.25.tap
+          echo "TAP version 13\r" > git-v2.25.tap
+          bats --tap -T test | tee -a git-v2.25.tap
 
       - name: Run tests (git v2.38.x)
         if: always()
         run: |
-          export PATH=/usr/local/git-2.38.x:$PATH
+          export PATH=/usr/local/git-v2.38.x/bin:$PATH
           git --version
-          echo "TAP version 13\r" > git-2.38.tap
-          bats --tap -T test | tee -a git-2.38.tap
+          echo "TAP version 13\r" > git-v2.38.tap
+          bats --tap -T test | tee -a git-v2.38.tap
 
       - name: Generate test summary
         uses: test-summary/action@v2
