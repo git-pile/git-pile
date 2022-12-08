@@ -2,12 +2,13 @@
 
 setup_file() {
   bats_require_minimum_version 1.7.0
-  load 'common'
+  load common.bash
 
   create_simple_repo $BATS_FILE_TMPDIR/testrepo
 }
 
 setup() {
+  load common.bash
   git clone $BATS_FILE_TMPDIR/testrepo $BATS_TEST_TMPDIR/testrepo
   pushd "$BATS_TEST_TMPDIR/testrepo"
   git pile init
@@ -31,7 +32,7 @@ setup() {
   rev0=$(git rev-parse HEAD)
 
   git pile genpatches -o untracked-output-dir
-  git -c pile.dir=untracked-output-dir pile genbranch -i
+  git pile genbranch -e untracked-output-dir -i
 
   rev1=$(git rev-parse HEAD)
   [ "$(git diff $rev0..$rev1)" = "" ]
@@ -67,4 +68,24 @@ setup() {
   rev0=$(git rev-parse internal)
   rev1=$(git rev-parse test)
   [ "$rev0" = "$rev1" ]
+}
+
+@test "genbranch-call-from-pile-worktree" {
+  add_pile_commits 3 1
+  git pile genbranch -i
+  head=$(git rev-parse HEAD)
+
+  # git-pile doesn't allow this because it would be very confusing
+  # since -i is documented to be "inplace", in the currect worktree
+  run ! git -C patches/ pile genbranch -i
+
+  # without -i it should work as long as it's not checkout anywhere:
+  # it's not ambiguous what the user  is trying to do
+  git -C patches/ pile genbranch -b tmp
+  [ "$head" = "$(git rev-parse tmp)" ]
+
+  pushd patches
+  # doesn't work as the internal branch has a checkout already
+  run ! git pile genbranch
+  popd
 }

@@ -1,26 +1,13 @@
 #!/usr/bin/env bats
 setup_file() {
   bats_require_minimum_version 1.7.0
-  load 'common'
+  load common.bash
 
   create_simple_repo "$BATS_FILE_TMPDIR/testrepo"
 }
 
-add_pile_commits() {
-  local n_commits=$1
-  local fn_number=$2
-
-  for i in $(seq 1 $n_commits); do
-    fn="foo${fn_number}.txt"
-    touch $fn
-    git add $fn
-    git commit -m "Add $fn"
-    git pile genpatches -m "Add patch adding $fn"
-    let fn_number+=1
-  done
-}
-
 setup() {
+  load common.bash
   git clone --bare "$BATS_FILE_TMPDIR/testrepo" "$BATS_TEST_TMPDIR/remoterepo"
 
   git clone "$BATS_TEST_TMPDIR/remoterepo" "$BATS_TEST_TMPDIR/testrepo"

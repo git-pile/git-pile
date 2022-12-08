@@ -790,8 +790,7 @@ class GenpatchesCmd(PileCommand):
         if not config.check_is_valid():
             return 1
 
-        root = git_root_or_die()
-        patchesdir = op.join(root, config.dir)
+        patchesdir = op.join(config.root, config.dir)
         base, result = parse_commit_range(args.commit_range, patchesdir, config.result_branch)
 
         commit_result = args.commit_result or args.message is not None
@@ -1054,8 +1053,7 @@ class AmCmd(PileCommand):
         if not config.check_is_valid():
             return 1
 
-        root = git_root_or_die()
-        patchesdir = op.join(root, config.dir)
+        patchesdir = op.join(config.root, config.dir)
 
         cover = PileCover.parse(args.mbox_cover)
         if not cover:
@@ -1372,14 +1370,13 @@ shortcut. From more verbose to the easiest ones:
     def run(self):
         args = self.args
         config = self.config
-        assert_required_tools()
-        assert_format_patch_compatible_args(args)
-
         if not config.check_is_valid():
             return 1
 
-        root = git_root_or_die()
-        patchesdir = op.join(root, config.dir)
+        assert_required_tools()
+        assert_format_patch_compatible_args(args)
+
+        patchesdir = op.join(config.root, config.dir)
         pile = Pile(path=patchesdir)
 
         oldbaseline, newbaseline, oldref, newref = _parse_format_refs(args.refs, pile.baseline())
@@ -1427,7 +1424,7 @@ option to this command."""
 
         # get a simple diff of all the changes to attach to the coverletter filtered by the
         # output of git-range-diff
-        with git_temporary_worktree(config.pile_branch, root) as tmpdir:
+        with git_temporary_worktree(config.pile_branch, config.root) as tmpdir:
             ret = genpatches(tmpdir, newbaseline, newref)
             if ret != 0:
                 return 1
@@ -1610,7 +1607,6 @@ class GenlinearBranchCmd(PileCommand):
         if not config.check_is_valid():
             return 1
 
-        root = git_root_or_die()
         branch = args.branch or config.linear_branch
         if not branch:
             fatal("Branch not specified in command-line and not configured: use -b argument or configure in pile.linear-branch")
@@ -1631,7 +1627,7 @@ class GenlinearBranchCmd(PileCommand):
             info("Nothing to do.")
             return 0
 
-        with git_temporary_worktree(refs[0], root) as piledir:
+        with git_temporary_worktree(refs[0], config.root) as piledir:
             # we have to checkout something in the directory we are going to
             # genbranch in order to please git-worktree. However this is just a
             # place to dump intermediate state that we are continuously resetting.
@@ -1639,7 +1635,7 @@ class GenlinearBranchCmd(PileCommand):
             # exist. In that case, just checkout anything, we are going to reset
             # to a new commit as the first thing anyway
             commit = Pile(path=piledir).baseline() or refs[0]
-            with git_temporary_worktree(commit, root) as resultdir:
+            with git_temporary_worktree(commit, config.root) as resultdir:
                 last_good_ref = None
                 tree = "tree " + git(f"log --format=%T -1 {parent_ref}").stdout.strip() if parent_ref else None
 
@@ -1664,11 +1660,11 @@ class GenlinearBranchCmd(PileCommand):
                     ts0 = timeit.default_timer()
 
                     try:
-                        with redirect_stdout(nul_f), redirect_stderr(nul_f), pushdir(resultdir, root):
+                        with redirect_stdout(nul_f), redirect_stderr(nul_f), pushdir(resultdir, config.root):
                             if pre_genbranch_exec:
                                 pre_genbranch_exec("", env=hook_env)
 
-                            genbranch(root, piledir, config, genbranch_args)
+                            genbranch(piledir, config, genbranch_args)
 
                             if post_genbranch_exec:
                                 post_genbranch_exec("", env=hook_env)
@@ -1756,8 +1752,7 @@ class BaselineCmd(PileCommand):
         if not config.check_is_valid():
             return 1
 
-        root = git_root_or_die()
-        patchesdir = op.join(root, config.dir)
+        patchesdir = op.join(config.root, config.dir)
         pile_from_dir = Pile(path=patchesdir)
         pile_from_rev = Pile(rev=args.ref or config.pile_branch)
         if args.ref is None:
@@ -1785,7 +1780,7 @@ class DestroyCmd(PileCommand):
         # configuration.
 
         # everything here is relative to root
-        os.chdir(git_root_or_die())
+        os.chdir(config.root)
 
         # implode - we have the cached values saved in config
         if not config.destroy():
@@ -1826,11 +1821,9 @@ class ResetCmd(PileCommand):
     def run(self):
         args = self.args
         config = self.config
+        gitroot = config.normalize(git_root_or_die())
         if not config.check_is_valid():
             return 1
-
-        # everything here is relative to root
-        gitroot = git_root_or_die()
 
         # ensure we have it checked-out
         pile_dir = git_worktree_get_checkout_path(gitroot, config.pile_branch)
@@ -1910,6 +1903,10 @@ def main(*cmd_args):
     cli.add_command(ResetCmd)
 
     args = parse_args(cli, cmd_args)
+    if args.command not in ("init", "setup"):
+        if not config.normalize(git_root_or_die()):
+            fatal("Could not find checkout for result-branch / pile-branch")
+
     try:
         return cli.run(args)
     except KeyboardInterrupt:
