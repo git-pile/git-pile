@@ -112,16 +112,16 @@ jobs:
       - name: Run tests (git from distro)
         run: |
           git --version
-          bats --print-output-on-failure --show-output-of-passing-tests --tap -T test
+          bats -T test
 
       - name: Run tests (git v2.25.x)
         run: |
           export PATH=/usr/local/git-2.25.x:$PATH
           git --version
-          bats --print-output-on-failure --show-output-of-passing-tests --tap -T test
+          bats -T test
 
       - name: Run tests (git v2.38.x)
         run: |
           export PATH=/usr/local/git-2.38.x:$PATH
           git --version
-          bats --print-output-on-failure --show-output-of-passing-tests --tap -T test
+          bats -T test
