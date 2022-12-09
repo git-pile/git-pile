@@ -1903,7 +1903,7 @@ def main(*cmd_args):
     cli.add_command(ResetCmd)
 
     args = parse_args(cli, cmd_args)
-    if args.command not in ("init", "setup"):
+    if args.command not in ("init", "setup", None):
         if not config.normalize(git_root_or_die()):
             fatal("Could not find checkout for result-branch / pile-branch")
 
