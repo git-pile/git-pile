@@ -143,8 +143,19 @@ def git_worktree_get_checkout_path(root, branch):
 
 # Get the git dir (aka .git) directory for the worktree related to
 # the @path. @path defaults to CWD
-def git_worktree_get_git_dir(path="."):
-    return git(f"-C {path} rev-parse --git-dir").stdout.strip("\n")
+def git_worktree_get_git_dir(path=".", force_absolute=False):
+    gitdir = git(f"-C {path} rev-parse --git-dir").stdout.strip("\n")
+    if force_absolute:
+        # Manpage for git-rev-parse says the following about the --git-dir
+        # option: "The path shown, when relative, is relative to the current
+        # working directory". Since it does not say when the path will be
+        # relative or not, let's do the necessary transformation when the caller
+        # wants an absolute path and use ``op.realpath()`` to remain consistent
+        # with the codebase.
+        if not op.isabs(gitdir):
+            gitdir = op.abspath(op.join(path, gitdir))
+        gitdir = op.realpath(gitdir)
+    return gitdir
 
 
 def git_worktree_list(root):
