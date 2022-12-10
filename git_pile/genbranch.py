@@ -164,7 +164,7 @@ pile patches."""
                 "of the pile. Pile needs to be updated to match result branch"
             )
 
-        if cache:
+        if cache and not any_fallback:
             cache.update(pile_for_cache, "HEAD")
             cache.save()
 
