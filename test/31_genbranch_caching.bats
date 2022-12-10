@@ -229,6 +229,24 @@ assert_fully_cached() {
 }
 
 
+# The genbranch command without --inplace uses a temporary worktree for the
+# operation. Check that we update the cache with the correct commits (i.e. from
+# the temporary worktree instead of the current one).
+@test "genbranch-not-inplace" {
+  echo "pile 1" > j.txt && git add j.txt && git commit -m "1st commit after baseline"
+  echo "pile 2" > j.txt && git add j.txt && git commit -m "2nd commit after baseline"
+  echo "pile 3" > j.txt && git add j.txt && git commit -m "3rd commit after baseline"
+  echo "pile 4" > j.txt && git add j.txt && git commit -m "4th commit after baseline"
+
+  git pile genpatches -m "First pile commit"
+  run_genbranch git pile genbranch -f
+
+  # Second run that uses the cache
+  run_genbranch git pile genbranch -f
+  assert_fully_cached
+}
+
+
 # Check that git pile correctly finds the cache file when genbranch is called
 # from the patches directory.
 @test "genbranch-caching-from-patches-dir" {

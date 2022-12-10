@@ -186,11 +186,11 @@ pile patches."""
         if args.dirty:
             raise git_temporary_worktree.Break
 
-        if cache:
-            cache.update(pile_for_cache, "HEAD")
-            cache.save()
-
         head = git(["-C", d, "rev-parse", "HEAD"]).stdout.strip()
+
+        if cache:
+            cache.update(pile_for_cache, head)
+            cache.save()
 
         if path:
             # args.force checked earlier

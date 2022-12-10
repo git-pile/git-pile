@@ -193,7 +193,7 @@ class _Node:
 
 
 class _CacheData:
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def __init__(self):
         self.trees = {}
