@@ -181,7 +181,7 @@ pile patches."""
             return 1
 
         if patchlist:
-            git(["-C", d] + apply_cmd + patchlist, stdout=stdout, stderr=stderr)
+            git(["-C", d] + apply_cmd + patchlist, stdout=stdout, stderr=stderr, env=env)
 
         if args.dirty:
             raise git_temporary_worktree.Break
