@@ -40,6 +40,9 @@ def genbranch(config, args):
     else:
         patchesdir = op.join(config.root, config.dir)
 
+    if args.use_cache is None:
+        args.use_cache = config.genbranch_use_cache
+
     pile = Pile(path=patchesdir, baseline=args.baseline)
 
     # Make sure the baseline hasn't been pruned
@@ -334,11 +337,12 @@ class GenbranchCmd(PileCommand):
         self.parser.add_argument(
             "--cache",
             help="Use cached information to avoid recreating commits. "
-            f'Default behavior is {"" if self.config.genbranch_use_cache else "NOT "}to use cache.',
+            "Default behavior is the to use cache if configuration "
+            "pile.genbranch-use-cache is undefined or set to true.",
             action="store_true",
             dest="use_cache",
         )
-        self.parser.set_defaults(use_cache=self.config.genbranch_use_cache)
+        self.parser.set_defaults(use_cache=None)
 
     def run(self):
         return genbranch(self.config, self.args)
