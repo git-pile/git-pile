@@ -84,7 +84,7 @@ jobs:
       # should be supported in any version of git we support
       - name: Setup git
         run: |
-          git config --global user.name "ci"
+          git config --global user.name "CI Bot"
           git config --global user.email "ci@git-pile.github.io"
           git config --global init.defaultBranch master
 
