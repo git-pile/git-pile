@@ -31,9 +31,14 @@ from .helpers import (
 from .pile import Pile
 
 
-def genbranch(patchesdir, config, args):
+def genbranch(config, args):
     if not config.check_is_valid():
         return 1
+
+    if args.external_pile:
+        patchesdir = args.external_pile
+    else:
+        patchesdir = op.join(config.root, config.dir)
 
     pile = Pile(path=patchesdir, baseline=args.baseline)
 
@@ -336,11 +341,4 @@ class GenbranchCmd(PileCommand):
         self.parser.set_defaults(use_cache=self.config.genbranch_use_cache)
 
     def run(self):
-        args = self.args
-        config = self.config
-        if args.external_pile:
-            patchesdir = args.external_pile
-        else:
-            patchesdir = op.join(config.root, config.dir)
-
-        return genbranch(patchesdir, config, args)
+        return genbranch(self.config, self.args)

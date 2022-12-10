@@ -1641,7 +1641,7 @@ class GenlinearBranchCmd(PileCommand):
 
                 # avoid exit() from genbranch - we want to recover and continue
                 set_fatal_behavior("raise")
-                genbranch_args = parse_args(self.cli, ["genbranch", "-i", "-q", "--no-fuzzy"])
+                genbranch_args = parse_args(self.cli, ["genbranch", "-i", "-q", "--no-fuzzy", "-e", piledir])
 
                 total_refs = len(refs)
 
@@ -1664,7 +1664,7 @@ class GenlinearBranchCmd(PileCommand):
                             if pre_genbranch_exec:
                                 pre_genbranch_exec("", env=hook_env)
 
-                            genbranch(piledir, config, genbranch_args)
+                            genbranch(config, genbranch_args)
 
                             if post_genbranch_exec:
                                 post_genbranch_exec("", env=hook_env)
