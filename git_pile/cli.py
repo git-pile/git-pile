@@ -130,7 +130,6 @@ class PileCLI:
         parser_kw = {k[7:]: v for k, v in cmd_cls.__dict__.items() if k.startswith("parser_")}
         parser = self.subparsers.add_parser(cmd_cls.name, **parser_kw)
 
-        cmd.config = self.config
         cmd.parser = parser
         cmd.cli = self
 
@@ -165,11 +164,13 @@ class PileCLI:
             raise Exception("command recursion not supported")
 
         cmd.args = args
+        cmd.config = self.config
 
         try:
             return cmd.run()
         finally:
             del cmd.args
+            del cmd.config
             if enable_debug:
                 helpers.set_debugging(saved_debug_flag)
 
