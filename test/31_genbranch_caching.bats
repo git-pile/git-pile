@@ -12,8 +12,8 @@ setup() {
   git clone "$BATS_TEST_TMPDIR/remoterepo" "$BATS_TEST_TMPDIR/testrepo"
   pushd "$BATS_TEST_TMPDIR/testrepo"
   git pile init
-  git config pile.genbranch-user-name = "pile bot"
-  git config pile.genbranch-user-email = "git@pi.le"
+  git config pile.genbranch-user-name "pile bot"
+  git config pile.genbranch-user-email "git@pi.le"
   git checkout -b internal
   git push origin -u --all
 }
@@ -146,8 +146,8 @@ assert_fully_cached() {
   # Do work on another repository: replace commit "2nd commit after baseline"
   git clone "$BATS_TEST_TMPDIR/remoterepo" "$BATS_TEST_TMPDIR/testrepo2"
   pushd "$BATS_TEST_TMPDIR/testrepo2"
-  git config pile.genbranch-user-name = "pile bot"
-  git config pile.genbranch-user-email = "git@pi.le"
+  git config pile.genbranch-user-name "pile bot"
+  git config pile.genbranch-user-email "git@pi.le"
   git checkout internal
   git pile setup origin/pile origin/internal
   git pile reset
