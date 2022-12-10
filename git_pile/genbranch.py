@@ -89,7 +89,7 @@ def genbranch(config, args):
     if not args.dirty and args.use_cache and cache_allowed:
         if not config.genbranch_cache_path:
             fatal("Missing cache path (config value for pile.genbranch-cache-path is empty)")
-        cache_path = op.join(git_worktree_get_git_dir(), config.genbranch_cache_path)
+        cache_path = op.join(git_worktree_get_git_dir(config.root, force_absolute=True), config.genbranch_cache_path)
         committer_ident = git(["var", "GIT_COMMITTER_IDENT"], env=env).stdout
         cache = GenbranchCache(cache_path, committer_ident=committer_ident)
         # Use Pile from a revision if possible, so we do not calculate sha1 for

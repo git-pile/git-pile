@@ -227,3 +227,19 @@ assert_fully_cached() {
   run_genbranch --no-uncached-check
   assert_cached 1
 }
+
+
+# Check that git pile correctly finds the cache file when genbranch is called
+# from the patches directory.
+@test "genbranch-caching-from-patches-dir" {
+  echo "pile 1" > j.txt && git add j.txt && git commit -m "1st commit after baseline"
+  echo "pile 2" > j.txt && git add j.txt && git commit -m "2nd commit after baseline"
+  echo "pile 3" > j.txt && git add j.txt && git commit -m "3rd commit after baseline"
+  echo "pile 4" > j.txt && git add j.txt && git commit -m "4th commit after baseline"
+
+  git pile genpatches -m "First pile commit"
+  run_genbranch
+
+  run_genbranch git -C "$(git config pile.dir)" pile genbranch -f
+  assert_fully_cached
+}
