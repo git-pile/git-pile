@@ -31,9 +31,17 @@ from .helpers import (
 from .pile import Pile
 
 
-def genbranch(patchesdir, config, args):
+def genbranch(config, args):
     if not config.check_is_valid():
         return 1
+
+    if args.external_pile:
+        patchesdir = args.external_pile
+    else:
+        patchesdir = op.join(config.root, config.dir)
+
+    if args.use_cache is None:
+        args.use_cache = config.genbranch_use_cache
 
     pile = Pile(path=patchesdir, baseline=args.baseline)
 
@@ -81,7 +89,7 @@ def genbranch(patchesdir, config, args):
     if not args.dirty and args.use_cache and cache_allowed:
         if not config.genbranch_cache_path:
             fatal("Missing cache path (config value for pile.genbranch-cache-path is empty)")
-        cache_path = op.join(git_worktree_get_git_dir(), config.genbranch_cache_path)
+        cache_path = op.join(git_worktree_get_git_dir(config.root, force_absolute=True), config.genbranch_cache_path)
         committer_ident = git(["var", "GIT_COMMITTER_IDENT"], env=env).stdout
         cache = GenbranchCache(cache_path, committer_ident=committer_ident)
         # Use Pile from a revision if possible, so we do not calculate sha1 for
@@ -156,7 +164,7 @@ pile patches."""
                 "of the pile. Pile needs to be updated to match result branch"
             )
 
-        if cache:
+        if cache and not any_fallback:
             cache.update(pile_for_cache, "HEAD")
             cache.save()
 
@@ -173,16 +181,16 @@ pile patches."""
             return 1
 
         if patchlist:
-            git(["-C", d] + apply_cmd + patchlist, stdout=stdout, stderr=stderr)
+            git(["-C", d] + apply_cmd + patchlist, stdout=stdout, stderr=stderr, env=env)
 
         if args.dirty:
             raise git_temporary_worktree.Break
 
-        if cache:
-            cache.update(pile_for_cache, "HEAD")
-            cache.save()
-
         head = git(["-C", d, "rev-parse", "HEAD"]).stdout.strip()
+
+        if cache:
+            cache.update(pile_for_cache, head)
+            cache.save()
 
         if path:
             # args.force checked earlier
@@ -329,18 +337,12 @@ class GenbranchCmd(PileCommand):
         self.parser.add_argument(
             "--cache",
             help="Use cached information to avoid recreating commits. "
-            f'Default behavior is {"" if self.config.genbranch_use_cache else "NOT "}to use cache.',
+            "Default behavior is the to use cache if configuration "
+            "pile.genbranch-use-cache is undefined or set to true.",
             action="store_true",
             dest="use_cache",
         )
-        self.parser.set_defaults(use_cache=self.config.genbranch_use_cache)
+        self.parser.set_defaults(use_cache=None)
 
     def run(self):
-        args = self.args
-        config = self.config
-        if args.external_pile:
-            patchesdir = args.external_pile
-        else:
-            patchesdir = op.join(config.root, config.dir)
-
-        return genbranch(patchesdir, config, args)
+        return genbranch(self.config, self.args)
