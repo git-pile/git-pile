@@ -4,7 +4,7 @@ RUN echo 'APT::Install-Recommends "0";' >> /etc/apt/apt.conf.d/00-docker
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y \
         git python3 python3-pip \
-        build-essential libssl-dev zlib1g-dev libcurl4-openssl-dev libexpat-dev gettext coreutils && \
+        build-essential libssl-dev zlib1g-dev libcurl4-openssl-dev libexpat-dev gettext coreutils sudo && \
   pip install flake8
 
 # 2.38.x: latest available version / Rolling distros / Fedora 36 and 37
@@ -26,4 +26,7 @@ RUN git clone https://github.com/git/git && cd git && \
     NO_TCLTK=1 make prefix=/usr/local/git-$vv -j$(nproc) && \
     NO_TCLTK=1 make prefix=/usr/local/git-$vv install; \
   done && cd - && rm -rf git
+RUN id
+RUN git clone --depth 1 --branch v1.7.0 https://github.com/bats-core/bats-core.git && \
+  /bats-core/install.sh /usr && rm -rf bats-core
 LABEL org.opencontainers.image.source=https://github.com/git-pile/git-pile
