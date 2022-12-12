@@ -107,7 +107,6 @@ jobs:
           bats --tap -T test | tee -a git.tap
 
       - name: Run tests (git v2.20.x)
-        if: always()
         run: |
           export PATH=/usr/local/git-v2.20.x/bin:$PATH
           git --version
@@ -115,7 +114,6 @@ jobs:
           bats --tap -T test | tee -a git-v2.20.tap
 
       - name: Run tests (git v2.25.x)
-        if: always()
         run: |
           export PATH=/usr/local/git-v2.25.x/bin:$PATH
           git --version
@@ -123,7 +121,6 @@ jobs:
           bats --tap -T test | tee -a git-v2.25.tap
 
       - name: Run tests (git v2.38.x)
-        if: always()
         run: |
           export PATH=/usr/local/git-v2.38.x/bin:$PATH
           git --version
@@ -132,12 +129,11 @@ jobs:
 
       - name: Generate test summary
         uses: test-summary/action@v2
-        if: always()
         with:
           paths: "*.tap"
 
       # Since coverage is only reported in git-pile itself, there is no need
-      # to report it for all python version - use just one of them
+      # to report it for all python versions - use just one of them
       - name: Coverage results
         if: ${{ matrix.python-version == '3.10' }}
         run: |
@@ -155,3 +151,11 @@ jobs:
         with:
           name: coverage-html
           path: htmlcov/
+
+      - name: Fail on any test failing
+        if: always()
+        run: |
+          if grep -q -e "^not ok" *.tap; then
+              echo "::error Some tests failed"
+              exit 1
+          fi
