@@ -76,43 +76,25 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Workaround directory permissions
+        run: |
+          chown -R $(id -u):$(id -g) .
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      # should be supported in any version of git we support
+      - name: Setup git
+        run: |
+          git config --global user.name "CI Bot"
+          git config --global user.email "ci@git-pile.github.io"
+          git config --global init.defaultBranch master
+
       - uses: actions/setup-python@v4
         name: Set up Python
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install coverage
-
-      - name: Export PATH
-        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - uses: actions/checkout@v3
-        with:
-          repository: bats-core/bats-core
-          ref: v1.7.0
-          path: test/bats-core
-      - run: test/bats-core/install.sh $HOME/.local
-
-      - name: Use git-pile from checkout
-        run: echo "$PWD" >> $GITHUB_PATH
-
-      - name: Setup git
-        run: |
-          git config --global user.name "ci"
-          git config --global user.email "ci@git-pile.github.io"
-          git config --global init.defaultBranch master
-
-      # User in the container will be root, but the cloned repo is owned by the
-      # user running github-runner. Git doesn't like that as the repo will then
-      # be unusable by the owner:  we don't care about it since this is only
-      # used for running these tests.
-      #
-      # See https://github.com/actions/runner/issues/2033
-      - name: Workaround directory permissions
-        run: git config --global --add safe.directory $PWD
+      - name: Install git-pile
+        run: python3 -m pip install --user --no-use-pep517 --editable .[tests]
 
       - name: Enable coverage
         if: ${{ matrix.python-version == '3.10' }}
@@ -124,30 +106,34 @@ jobs:
           echo "TAP version 13\r" > git.tap
           bats --tap -T test | tee -a git.tap
 
-      - name: Run tests (git v2.25.x)
-        if: always()
+      - name: Run tests (git v2.20.x)
         run: |
-          export PATH=/usr/local/git-2.25.x:$PATH
+          export PATH=/usr/local/git-v2.20.x/bin:$PATH
           git --version
-          echo "TAP version 13\r" > git-2.25.tap
-          bats --tap -T test | tee -a git-2.25.tap
+          echo "TAP version 13\r" > git-v2.20.tap
+          bats --tap -T test | tee -a git-v2.20.tap
+
+      - name: Run tests (git v2.25.x)
+        run: |
+          export PATH=/usr/local/git-v2.25.x/bin:$PATH
+          git --version
+          echo "TAP version 13\r" > git-v2.25.tap
+          bats --tap -T test | tee -a git-v2.25.tap
 
       - name: Run tests (git v2.38.x)
-        if: always()
         run: |
-          export PATH=/usr/local/git-2.38.x:$PATH
+          export PATH=/usr/local/git-v2.38.x/bin:$PATH
           git --version
-          echo "TAP version 13\r" > git-2.38.tap
-          bats --tap -T test | tee -a git-2.38.tap
+          echo "TAP version 13\r" > git-v2.38.tap
+          bats --tap -T test | tee -a git-v2.38.tap
 
       - name: Generate test summary
         uses: test-summary/action@v2
-        if: always()
         with:
           paths: "*.tap"
 
       # Since coverage is only reported in git-pile itself, there is no need
-      # to report it for all python version - use just one of them
+      # to report it for all python versions - use just one of them
       - name: Coverage results
         if: ${{ matrix.python-version == '3.10' }}
         run: |
@@ -165,3 +151,11 @@ jobs:
         with:
           name: coverage-html
           path: htmlcov/
+
+      - name: Fail on any test failing
+        if: always()
+        run: |
+          if grep -q -e "^not ok" *.tap; then
+              echo "::error Some tests failed"
+              exit 1
+          fi
