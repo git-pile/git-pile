@@ -26,6 +26,9 @@ RUN git clone https://github.com/git/git && cd git && \
     NO_TCLTK=1 make prefix=/usr/local/git-$vv -j$(nproc) && \
     NO_TCLTK=1 make prefix=/usr/local/git-$vv install; \
   done && cd - && rm -rf git
+RUN git config --global user.name "CI Bot" && \
+  git config --global user.email "ci@git-pile.github.io" && \
+  git config --global init.defaultBranch master
 RUN id
 RUN git clone --depth 1 --branch v1.7.0 https://github.com/bats-core/bats-core.git && \
   /bats-core/install.sh /usr && rm -rf bats-core
