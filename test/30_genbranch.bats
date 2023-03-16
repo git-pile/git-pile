@@ -89,3 +89,15 @@ setup() {
   run ! git pile genbranch
   popd
 }
+
+@test "genbranch-rev" {
+  add_pile_commits 3 1
+  git pile genbranch -i
+  head=$(git rev-parse HEAD)
+
+  add_pile_commits 1 4
+  git pile genbranch -i
+
+  git pile genbranch -i --pile-rev pile~1
+  [ "$head" = "$(git rev-parse HEAD)" ]
+}

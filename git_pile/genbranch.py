@@ -3,6 +3,7 @@
 Module that implements the genbranch operation.
 """
 import argparse
+import contextlib
 import os
 import os.path as op
 import pathlib
@@ -32,11 +33,21 @@ from .pile import Pile
 
 
 def genbranch(config, args):
+    with contextlib.ExitStack() as exit_stack:
+        return genbranch_with_exit_stack(config, args, exit_stack)
+
+
+def genbranch_with_exit_stack(config, args, exit_stack):
     if not config.check_is_valid():
         return 1
 
+    if args.external_pile and args.pile_rev:
+        fatal("options --external-pile and --pile-rev are mutually exclusive")
+
     if args.external_pile:
         patchesdir = args.external_pile
+    elif args.pile_rev:
+        patchesdir = exit_stack.enter_context(git_temporary_worktree(args.pile_rev, config.root))
     else:
         patchesdir = op.join(config.root, config.dir)
 
@@ -95,12 +106,17 @@ def genbranch(config, args):
         # Use Pile from a revision if possible, so we do not calculate sha1 for
         # each patch.
         pile_for_cache = pile
-        try:
-            if git(["-C", patchesdir, "status", "--porcelain"], stderr=nul_f).stdout.strip() == "":
-                pile_rev = git(["-C", patchesdir, "rev-parse", "HEAD"]).stdout.strip()
-                pile_for_cache = Pile(rev=pile_rev, baseline=args.baseline)
-        except subprocess.CalledProcessError:
-            pass
+        cache_pile_rev = args.pile_rev
+
+        if not cache_pile_rev:
+            try:
+                if git(["-C", patchesdir, "status", "--porcelain"], stderr=nul_f).stdout.strip() == "":
+                    cache_pile_rev = git(["-C", patchesdir, "rev-parse", "HEAD"]).stdout.strip()
+            except subprocess.CalledProcessError:
+                pass
+
+        if cache_pile_rev:
+            pile_for_cache = Pile(rev=cache_pile_rev, baseline=args.baseline)
 
         effective_baseline, patchlist_offset = cache.search_best_base(pile_for_cache)
         if patchlist_offset:
@@ -299,6 +315,7 @@ class GenbranchCmd(PileCommand):
             "-q", "--quiet", help="Quiet mode - do not print list of patches", action="store_true", default=False
         )
         self.parser.add_argument("-e", "--external-pile", help="Use external pile dir as input", default=None)
+        self.parser.add_argument("--pile-rev", help="Use pile revision as input instead of current pile checkout")
         self.parser.add_argument(
             "-i",
             "--inplace",
