@@ -38,17 +38,21 @@ class Config:
     __attr_doc_genbranch_use_cache = "(bool): Use cached information to avoid recreating commits"
     __attr_doc_genbranch_cache_path = "(path): Path (relative to the .git dir) to the cache file for genbranch"
 
-    def __init__(self):
+    def __init__(self, skip_load=False):
         if git_worktree_config_extension_enabled():
             self.write = run_wrapper(["git", "config", "--worktree"], capture=True)
         else:
             self.write = run_wrapper(["git", "config"], capture=True)
 
-        # assume the call is from main worktree, where the result-branch is
-        # normally checkout
-        self._load_config_values(git_root_or_die())
+        root = git_root_or_die()
+        if skip_load:
+            self._set_defaults(root)
+        else:
+            # assume the call is from main worktree, where the result-branch is
+            # normally checkout
+            self.load_config_values(root)
 
-    def _load_config_values(self, root):
+    def _set_defaults(self, root):
         self.root = root
         self.dir = ""
         self.linear_branch = ""
@@ -63,6 +67,9 @@ class Config:
         self.genbranch_user_email = None
         self.genbranch_use_cache = True
         self.genbranch_cache_path = "pile-genbranch-cache.pickle"
+
+    def load_config_values(self, root):
+        self._set_defaults(root)
 
         s = git(f"-C {root} config --get-regexp ^pile\\.*", check=False, stderr=nul_f).stdout.strip()
         if not s:
@@ -102,7 +109,7 @@ class Config:
         for w in worktrees:
             pile_dir = git(f"-C {w} config --get pile.dir", check=False, stderr=nul_f).stdout.strip()
             if pile_worktree == op.realpath(op.join(w, pile_dir)):
-                self._load_config_values(w)
+                self.load_config_values(w)
                 return w
 
         return None
