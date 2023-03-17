@@ -82,6 +82,7 @@ import sys
 import textwrap
 
 from . import __version__
+from . import config as configmod
 from . import helpers
 
 
@@ -110,7 +111,7 @@ class PileCommand:
 
 
 class PileCLI:
-    def __init__(self, config):
+    def __init__(self, config=None):
         self.config = config
         self.parser = argparse.ArgumentParser(
             description=PILE_COMMAND_DESCRIPTION,
@@ -123,6 +124,16 @@ class PileCLI:
             version=f"git-pile {__version__}",
         )
         self.subparsers = self.parser.add_subparsers(title="Commands", dest="command")
+
+    def __onetime_config_setup(self, args):
+        self.__onetime_config_setup = lambda *_: None
+
+        if not self.config:
+            self.config = configmod.Config()
+
+            if args.command not in ("init", "setup"):
+                if not self.config.normalize(self.config.root):
+                    helpers.fatal("Could not find checkout for result-branch / pile-branch")
 
     def add_command(self, cmd_cls):
         cmd = cmd_cls()
@@ -153,6 +164,8 @@ class PileCLI:
         except AttributeError:
             self.parser.print_help()
             return 1
+
+        self.__onetime_config_setup(args)
 
         # Save args.debug value, since args is mutable.
         enable_debug = args.debug
