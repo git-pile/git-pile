@@ -38,7 +38,12 @@ def genbranch(config, args):
 
 
 def genbranch_with_exit_stack(config, args, exit_stack):
-    if not config.check_is_valid():
+    if args.no_config:
+        if not (args.external_pile or args.pile_rev):
+            fatal("--external-pile or --pile-rev is required when using --no-config")
+        if not (args.inplace or args.branch):
+            fatal("--inplace or --branch is required when using --no-config")
+    elif not config.check_is_valid():
         return 1
 
     if args.external_pile and args.pile_rev:
@@ -297,8 +302,21 @@ class GenbranchCmd(PileCommand):
     Generate RESULT_BRANCH by applying patches from PILE_BRANCH on top of BASELINE
     """
 
-    parser_epilog = Config.help("genbranch")
+    parser_epilog = (
+        Config.help("genbranch")
+        + """
+
+Running without a setup in place:
+  The genbranch command is usually run with a repository already configured for
+  git-pile, however it is also possible to use --no-config to generate the
+  result branch without a setup in place (e.g. "git pile --no-config genbranch
+  -i -e path/to/patches").
+"""
+    )
+
     parser_formatter_class = argparse.RawTextHelpFormatter
+
+    supports_no_config = True
 
     def init(self):
         self.parser.add_argument(
