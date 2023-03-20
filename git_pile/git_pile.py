@@ -128,6 +128,8 @@ class InitCmd(PileCommand):
     Initialize configuration of an empty pile in this repository
     """
 
+    skip_config_normalize = True
+
     def init(self):
         self.parser.add_argument(
             "-d", "--dir", help="Directory in which to place patches (default: %(default)s)", metavar="DIR", default="patches"
@@ -220,6 +222,8 @@ class SetupCmd(PileCommand):
     """
     Setup/copy configuration from a remote or already created branches
     """
+
+    skip_config_normalize = True
 
     def init(self):
         self.parser.add_argument(

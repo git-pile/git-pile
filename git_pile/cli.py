@@ -57,6 +57,10 @@ Notes regarding ``PileCommand`` subclasses:
   - The class attribute ``supports_no_config`` should be set True for commands
     that are supposed to handle calls with option ``--no-config`` passed.
 
+  - The class attribute ``skip_config_normalize`` should be set True for commands
+    that should not have the config object being automatically normalized (i.e.
+    have ``Config.normalized()`` called).
+
   - There are two main methods expected to be implemented by subclasses:
 
     1. ``init()``: this is where initialization (like adding arguments) is done.
@@ -103,6 +107,9 @@ class PileCommand:
 
         if not hasattr(cls, "supports_no_config"):
             cls.supports_no_config = False
+
+        if not hasattr(cls, "skip_config_normalize"):
+            cls.skip_config_normalize = False
 
     @classmethod
     def __default_cmd_name(cls):
@@ -151,7 +158,7 @@ class PileCLI:
 
             self.config = configmod.Config(skip_load=args.no_config)
 
-            if args.command not in ("init", "setup") and not args.no_config:
+            if not cmd.skip_config_normalize and not args.no_config:
                 if not self.config.normalize(self.config.root):
                     helpers.fatal("Could not find checkout for result-branch / pile-branch")
 
