@@ -101,3 +101,39 @@ setup() {
   git pile genbranch -i --pile-rev pile~1
   [ "$head" = "$(git rev-parse HEAD)" ]
 }
+
+
+# Test usage of genbranch combined with the --no-config option.
+@test "genbranch-no-config" {
+  add_pile_commits 3 1
+  git pile genbranch -i
+  git pile genpatches -o "$BATS_TEST_TMPDIR/external-patches"
+
+  git clone . "$BATS_TEST_TMPDIR/no-setup-a"
+  pushd "$BATS_TEST_TMPDIR/no-setup-a"
+
+  # Check that wrong usage is caught.
+  run --separate-stderr ! git pile --no-config genbranch
+  [[ "$stderr" = *"--external-pile or --pile-rev is required when using --no-config"* ]]
+  run --separate-stderr ! git pile --no-config genbranch --pile-rev origin/pile
+  [[ "$stderr" = *"--inplace or --branch is required when using --no-config"* ]]
+
+  # Make sure branches for the --inplace are not at the default result branch to
+  # avoid wrongly thinking things worked when comparing the heads.
+  git checkout -b inplace-pile-rev $(git rev-list --max-parents=0 origin/internal)
+  git checkout -b inplace-external-pile $(git rev-list --max-parents=0 origin/internal)
+
+  git checkout inplace-pile-rev
+  git pile --no-config genbranch -i --pile-rev origin/pile
+  [ "$(git rev-parse origin/internal)" = "$(git rev-parse inplace-pile-rev)" ]
+
+  git checkout inplace-external-pile
+  git pile --no-config genbranch -i -e "$BATS_TEST_TMPDIR/external-patches"
+  [ "$(git rev-parse origin/internal)" = "$(git rev-parse inplace-external-pile)" ]
+
+  git pile --no-config genbranch -b another-branch-pile-rev --pile-rev origin/pile
+  [ "$(git rev-parse origin/internal)" = "$(git rev-parse another-branch-pile-rev)" ]
+
+  git pile --no-config genbranch -b another-branch-pile-rev -e "$BATS_TEST_TMPDIR/external-patches"
+  [ "$(git rev-parse origin/internal)" = "$(git rev-parse another-branch-pile-rev)" ]
+}

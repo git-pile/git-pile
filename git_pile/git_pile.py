@@ -128,6 +128,8 @@ class InitCmd(PileCommand):
     Initialize configuration of an empty pile in this repository
     """
 
+    skip_config_normalize = True
+
     def init(self):
         self.parser.add_argument(
             "-d", "--dir", help="Directory in which to place patches (default: %(default)s)", metavar="DIR", default="patches"
@@ -220,6 +222,8 @@ class SetupCmd(PileCommand):
     """
     Setup/copy configuration from a remote or already created branches
     """
+
+    skip_config_normalize = True
 
     def init(self):
         self.parser.add_argument(
@@ -1888,9 +1892,7 @@ def parse_args(cli, cmd_args):
 def main(*cmd_args):
     log_enable_color(sys.stdout.isatty(), sys.stderr.isatty())
 
-    config = Config()
-
-    cli = PileCLI(config)
+    cli = PileCLI()
     cli.add_command(InitCmd)
     cli.add_command(SetupCmd)
     cli.add_command(GenpatchesCmd)
@@ -1903,10 +1905,6 @@ def main(*cmd_args):
     cli.add_command(ResetCmd)
 
     args = parse_args(cli, cmd_args)
-    if args.command not in ("init", "setup", None):
-        if not config.normalize(git_root_or_die()):
-            fatal("Could not find checkout for result-branch / pile-branch")
-
     try:
         return cli.run(args)
     except KeyboardInterrupt:

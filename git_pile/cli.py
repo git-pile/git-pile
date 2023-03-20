@@ -54,6 +54,13 @@ Notes regarding ``PileCommand`` subclasses:
     keyword to the call to ``add_parser()``. For example, the value of
     ``parser_epilog`` will be passed as the ``epilog`` keyword.
 
+  - The class attribute ``supports_no_config`` should be set True for commands
+    that are supposed to handle calls with option ``--no-config`` passed.
+
+  - The class attribute ``skip_config_normalize`` should be set True for commands
+    that should not have the config object being automatically normalized (i.e.
+    have ``Config.normalized()`` called).
+
   - There are two main methods expected to be implemented by subclasses:
 
     1. ``init()``: this is where initialization (like adding arguments) is done.
@@ -82,6 +89,7 @@ import sys
 import textwrap
 
 from . import __version__
+from . import config as configmod
 from . import helpers
 
 
@@ -97,6 +105,12 @@ class PileCommand:
         if not hasattr(cls, "parser_help"):
             cls.parser_help, _, _ = cls.parser_description.strip().partition("\n")
 
+        if not hasattr(cls, "supports_no_config"):
+            cls.supports_no_config = False
+
+        if not hasattr(cls, "skip_config_normalize"):
+            cls.skip_config_normalize = False
+
     @classmethod
     def __default_cmd_name(cls):
         name = cls.__name__
@@ -110,7 +124,7 @@ class PileCommand:
 
 
 class PileCLI:
-    def __init__(self, config):
+    def __init__(self, config=None):
         self.config = config
         self.parser = argparse.ArgumentParser(
             description=PILE_COMMAND_DESCRIPTION,
@@ -122,7 +136,31 @@ class PileCLI:
             action="version",
             version=f"git-pile {__version__}",
         )
+        self.parser.add_argument(
+            "--no-config",
+            help="""
+            Skip loading the configuration values from git config. This is
+            useful for pile commands that do not require a complete pile setup
+            (or for when you know what you are doing and want to do things in an
+            unorthodox way).
+            """,
+            action="store_true",
+        )
+
         self.subparsers = self.parser.add_subparsers(title="Commands", dest="command")
+
+    def __onetime_config_setup(self, args, cmd):
+        self.__onetime_config_setup = lambda *_: None
+
+        if not self.config:
+            if args.no_config and not cmd.supports_no_config:
+                helpers.warn(f"subcommand {args.command} is not supposed to be called with --no-config")
+
+            self.config = configmod.Config(skip_load=args.no_config)
+
+            if not cmd.skip_config_normalize and not args.no_config:
+                if not self.config.normalize(self.config.root):
+                    helpers.fatal("Could not find checkout for result-branch / pile-branch")
 
     def add_command(self, cmd_cls):
         cmd = cmd_cls()
@@ -153,6 +191,8 @@ class PileCLI:
         except AttributeError:
             self.parser.print_help()
             return 1
+
+        self.__onetime_config_setup(args, cmd)
 
         # Save args.debug value, since args is mutable.
         enable_debug = args.debug
