@@ -1160,8 +1160,8 @@ def _parse_format_refs(refs, current_baseline):
             oldref = None
             try:
                 oldbaseline = git(f"rev-parse {r1[0]}", stderr=nul_f).stdout.strip()
-                newbaseline = git(f"rev-parse {r2[0]}", stderr=nul_f).stdout.strip()
                 oldref = git(f"rev-parse {r1[1]}", stderr=nul_f).stdout.strip()
+                newbaseline = git(f"rev-parse {r2[0]}", stderr=nul_f).stdout.strip()
                 newref = git(f"rev-parse {r2[1]}", stderr=nul_f).stdout.strip()
             except subprocess.CalledProcessError:
                 if not oldbaseline or not oldref:
