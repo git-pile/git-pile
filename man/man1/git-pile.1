@@ -43,12 +43,12 @@ example:
 series  config  X.patch  Y.patch  Z.patch
 .PP
 The "series" and "config" files are there to allow git\-pile to do its job and
-are retained for compatibility with quilt and qf. For that reason the latter is
+are retained for compatibility with quilt and qf. For that reason, the latter is
 also where BASELINE is stored/read when it's needed. git\-pile exposes commands
 to convert back and forth between RESULT_BRANCH and the files on PILE_BRANCH.
 Those commands allows to save the history of the patches when the BASELINE
 changes or patches are added, modified or removed in RESULT_BRANCH. Below is a
-example in which BASELINE may evolve to add more commit from upstream:
+example in which BASELINE may evolve to add more commits from upstream:
 .IP
 D\-\-\-E master
 .IP

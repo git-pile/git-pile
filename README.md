@@ -27,7 +27,7 @@ $ git-pile -h
 ```
 
 For autocomplete to work you need Python's argcomplete module installed.
-In the first case you also need to source the bash autocomplete file
+In the first case, you also need to source the bash autocomplete file
 `extra/git-pile-complete.sh` so git knows how to complete the subcommand.
 
 You can also install git-pile as a python package, although that's still not
@@ -111,7 +111,7 @@ with `git rebase -i`. In the example below we will move it 10 commits down:
 $ git rebase -i -11
 
   [ editor opens and you move the commit around. You can also reorder
-    commits, edit commit message, etc, etc. Anything you do in a
+    commits, edit commit message, etc, etc. Anything you do in an
     interactive rebase you can do here ]
 
 $ git pile format-patch -o /tmp/patches
@@ -167,4 +167,4 @@ If anything goes wrong and you'd like to start over, you can call the `destroy`
 command. This will remove all configuration saved by git-pile, the pile branch
 itself and the worktree directory it was using. If you have a backup of the
 patches (either manual or if the pile branch is in a remote repository), this
-is pretty safe to do and allow you to redo the configuration.
+is pretty safe to do and allows you to redo the configuration.
