@@ -51,9 +51,16 @@ add_commits_and_format_patch() {
     "$BATS_TEST_TMPDIR/format-patch-out/0000-cover-letter.patch"
 }
 
-@test "format-patch-and-am" {
+format_patch_and_am() {
+  local strategy=$1
   add_commits_and_format_patch
-  git pile am "$BATS_TEST_TMPDIR/format-patch-out/0000-cover-letter.patch"
+
+  if [[ $strategy == "merge-range" ]]; then
+    # Ensure editor is not invoked
+    export GIT_SEQUENCE_EDITOR=true
+  fi
+
+  git pile am -s $strategy "$BATS_TEST_TMPDIR/format-patch-out/0000-cover-letter.patch"
 
   actual=$(git show -s --format=%s%n%b $(git config pile.pile-branch))
   expected=$'Second pile commit\nWill be applied with am!'
@@ -62,6 +69,14 @@ add_commits_and_format_patch() {
   git pile genbranch -i
   range_diff=$(git range-diff -s $dev_tip... | sed "/^[0-9]\+:\s\+[0-9a-f]\+ =/d")
   [ "$range_diff" = "" ]
+}
+
+@test "format-patch-and-am-strategy-top" {
+  format_patch_and_am top
+}
+
+@test "format-patch-and-am-strategy-merge-range" {
+  format_patch_and_am merge-range
 }
 
 @test "am-genbranch" {
