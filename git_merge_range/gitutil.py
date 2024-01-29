@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1+
 from __future__ import annotations
 
+import collections
 import subprocess
 import re
 import typing as ty
@@ -24,37 +25,50 @@ class Git:
         subprocess_kw.setdefault("check", True)
         return subprocess.run(("git", *args), **subprocess_kw)
 
-    def commit_list(self, revrange: RevRange) -> ty.List[ShortCommitInfo]:
-        cmd = "log", "--format=%h %s", "--reverse", str(revrange)
-        return [
-            ShortCommitInfo(sha1, subject)
-            for sha1, subject in (line.split(maxsplit=1) for line in self(*cmd, strip=False).splitlines())
-        ]
-
-    def range_diff(self, range_a: RevRange, range_b: RevRange) -> ty.List[RangeDiffEntry]:
-        line_re = re.compile(r" *(-|\d+): *([0-9a-f]+|-+) *([<>=!]) *(-|\d+): *([0-9a-f]+|-+) .*")
-        cmd = "range-diff", "-s", str(range_a), str(range_b)
+    def commit_list(self, revrange: RevRange) -> ty.List[CommitData]:
         ret = []
-        for line in self(*cmd, strip=False).splitlines():
-            m = line_re.match(line)
-            if m is None:
-                raise Exception(f"unable to parse range-diff line: {line!r}")
-
-            left, status, right = m.group(2, 3, 5)
-
-            if left[0] == "-":
-                left = ""
-
-            if right[0] == "-":
-                right = ""
-
-            ret.append(RangeDiffEntry(left, right, status))
+        # TODO: We might want to let user decided what to use for metadata
+        metadata_fmt = "%an%n%ae%n%B"
+        cmd = "log", "-z", "--patch", f"--format=%x00%h%x00%s%x00{metadata_fmt}", "--reverse", str(revrange)
+        out = self(*cmd, strip=False)
+        data = out.split("\x00")[1:]
+        for i in range(0, len(data), 4):
+            sha1, subject, metadata, diff = data[i : i + 4]
+            filtered_diff = self.__diff_hunk_lines_re.sub("@@ @@", diff)
+            filtered_diff = self.__diff_ignore_headers_re.sub("", filtered_diff)
+            ret.append(CommitData(sha1, subject, metadata, filtered_diff))
         return ret
 
+    def find_matching_commits(
+        self, commits_a: ty.List[CommitData], commits_b: ty.List[CommitData]
+    ) -> ty.Generator[ty.Tuple[CommitData, CommitData], None, None]:
+        # No need to compare full message body and diff content if the subjects
+        # do not match. Let's use this map for that, which should make the
+        # expected complexity linear.
+        subject_to_b: ty.DefaultDict[str, ty.List[CommitData]] = collections.defaultdict(list)
+        for b in commits_b:
+            subject_to_b[b.subject].append(b)
 
-class ShortCommitInfo(ty.NamedTuple):
+        for a in commits_a:
+            if a.subject not in subject_to_b:
+                continue
+            for b in subject_to_b[a.subject]:
+                if a.sha1 != b.sha1:
+                    if a.metadata != b.metadata:
+                        continue
+                    if a.filtered_diff != b.filtered_diff:
+                        continue
+                yield a, b
+
+    __diff_hunk_lines_re = re.compile(r"^@@ -\d+,\d+ \+\d+,\d+ @@", re.M)
+    __diff_ignore_headers_re = re.compile(r"^(index|similarity|dissimilarity) .*$\n", re.M)
+
+
+class CommitData(ty.NamedTuple):
     sha1: str
     subject: str
+    metadata: str
+    filtered_diff: str
 
 
 class NormalizedRevRange(ty.NamedTuple):
@@ -66,9 +80,3 @@ class NormalizedRevRange(ty.NamedTuple):
 
 
 RevRange = ty.Union[str, NormalizedRevRange]
-
-
-class RangeDiffEntry(ty.NamedTuple):
-    left: str
-    right: str
-    status: str
