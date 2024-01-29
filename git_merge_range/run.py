@@ -41,17 +41,14 @@ class Run:
     def __build_qspace(self) -> None:
         qs_builder = qspace.QuotientSpaceBuilder[str]()
 
-        for entry in self.__git.range_diff(self.__args.base, self.__args.current):
-            if entry.status == "=":
-                qs_builder.update(entry.left, entry.right)
+        for a, b in self.__git.find_matching_commits(self.__base_commits, self.__current_commits):
+            qs_builder.update(a.sha1, b.sha1)
 
-        for entry in self.__git.range_diff(self.__args.base, self.__args.other):
-            if entry.status == "=":
-                qs_builder.update(entry.left, entry.right)
+        for a, b in self.__git.find_matching_commits(self.__base_commits, self.__other_commits):
+            qs_builder.update(a.sha1, b.sha1)
 
-        for entry in self.__git.range_diff(self.__args.current, self.__args.other):
-            if entry.status == "=":
-                qs_builder.update(entry.left, entry.right)
+        for a, b in self.__git.find_matching_commits(self.__current_commits, self.__other_commits):
+            qs_builder.update(a.sha1, b.sha1)
 
         for c in self.__commit_map:
             qs_builder.update(c)
@@ -158,20 +155,20 @@ class Run:
                 todo_lines.append(marker)
 
             for idx in indices:
-                commit_info: ty.Optional[gitutil.ShortCommitInfo] = None
+                commit_data: ty.Optional[gitutil.CommitData] = None
                 if chunk_type == "merged":
                     sha1_set = current_sha1_set
                     for sha1 in qs_sets[idx]:
                         if sha1 in sha1_set:
-                            commit_info = self.__commit_map[sha1]
+                            commit_data = self.__commit_map[sha1]
                             break
                     else:
                         sha1_set = other_sha1_set
 
-                if commit_info is None:
+                if commit_data is None:
                     for sha1 in qs_sets[idx]:
                         if sha1 in sha1_set:
-                            commit_info = self.__commit_map[sha1]
+                            commit_data = self.__commit_map[sha1]
                             break
                     else:
                         raise Exception("bug: sha1 not found for index")
@@ -189,9 +186,9 @@ class Run:
                     extra_matches_str = ""
                 elif chunk_type != "merged":
                     extra_matches_str = ""
-                    current_matches = [sha1 for sha1 in qs_sets[idx] if sha1 in current_sha1_set and sha1 != commit_info.sha1]
-                    base_matches = [sha1 for sha1 in qs_sets[idx] if sha1 in base_sha1_set and sha1 != commit_info.sha1]
-                    other_matches = [sha1 for sha1 in qs_sets[idx] if sha1 in other_sha1_set and sha1 != commit_info.sha1]
+                    current_matches = [sha1 for sha1 in qs_sets[idx] if sha1 in current_sha1_set and sha1 != commit_data.sha1]
+                    base_matches = [sha1 for sha1 in qs_sets[idx] if sha1 in base_sha1_set and sha1 != commit_data.sha1]
+                    other_matches = [sha1 for sha1 in qs_sets[idx] if sha1 in other_sha1_set and sha1 != commit_data.sha1]
 
                     if current_matches:
                         extra_matches_str += f" == OURS({','.join(current_matches)})"
@@ -205,7 +202,7 @@ class Run:
                 if chunk_type != "merged" or len(qs_sets[idx]) == 1:
                     todo_lines.append(f"{indent}# INFO: {origin}{extra_matches_str}")
 
-                todo_lines.append(f"{indent}pick {commit_info.sha1} {commit_info.subject}")
+                todo_lines.append(f"{indent}pick {commit_data.sha1} {commit_data.subject}")
 
             if chunk_type == "theirs":
                 todo_lines.append(">>>>>>> THEIRS")
