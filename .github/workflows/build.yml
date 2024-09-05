@@ -11,26 +11,29 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        python-version: [ '3.7', '3.9', '3.10' ]
+        python-version: [ '3.7', '3.9', '3.10', '3.12' ]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         name: Set up Python
         with:
           python-version: ${{ matrix.python-version }}
 
       - uses: psf/black@stable
+        if: ${{ matrix.python-version == '3.10' }}
         with:
           options: "--check --diff --verbose"
 
       - name: Install dependencies
+        if: ${{ matrix.python-version == '3.10' }}
         run: |
           python -m pip install --upgrade pip
           pip install flake8
 
       - name: Lint with flake8
+        if: ${{ matrix.python-version == '3.10' }}
         run: |
           # stop the build if there are Python syntax errors or undefined names
           flake8 . --count --exclude setup.py --extend-ignore E722,W605 --show-source --statistics
@@ -72,9 +75,9 @@ jobs:
         password: ${{ secrets.github_token }}
     strategy:
       matrix:
-        python-version: [ '3.7', '3.9', '3.10' ]
+        python-version: [ '3.7', '3.9', '3.10', '3.12' ]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Workaround directory permissions
         run: |
@@ -88,13 +91,16 @@ jobs:
           git config --global user.email "ci@git-pile.github.io"
           git config --global init.defaultBranch master
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         name: Set up Python
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install dependencies
+        run: pip install --upgrade pip setuptools wheel
+
       - name: Install git-pile
-        run: python3 -m pip install --user --no-use-pep517 --editable .[tests]
+        run: python3 -m pip install --user -e .[tests]
 
       - name: Enable coverage
         if: ${{ matrix.python-version == '3.10' }}
