@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import collections
+import os
 import subprocess
 import re
 import typing as ty
@@ -59,6 +60,22 @@ class Git:
                     if a.filtered_diff != b.filtered_diff:
                         continue
                 yield a, b
+
+    def sequence_editor(self):
+        try:
+            return self("var", "GIT_SEQUENCE_EDITOR")
+        except subprocess.CalledProcessError:
+            # Support for GIT_SEQUENCE_EDITOR in git-var was added only in git
+            # v2.40. Let's fallback to mimic git's implementation.
+            editor = os.environ.get("GIT_SEQUENCE_EDITOR")
+
+            if not editor:
+                editor = self("config", "get", "sequence.editor")
+
+            if not editor:
+                editor = self("var", "GIT_EDITOR")
+
+            return editor
 
     __diff_hunk_lines_re = re.compile(r"^@@ -\d+,\d+ \+\d+,\d+ @@", re.M)
     __diff_ignore_headers_re = re.compile(r"^(index|similarity|dissimilarity) .*$\n", re.M)

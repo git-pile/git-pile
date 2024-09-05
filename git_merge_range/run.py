@@ -228,7 +228,7 @@ class Run:
 
             entrypoint = sys.argv[0]  # FIXME: Receive this as argument.
             env = dict(os.environ)
-            original_seq_editor = self.__git("var", "GIT_SEQUENCE_EDITOR")
+            original_seq_editor = self.__git.sequence_editor()
             env["GIT_SEQUENCE_EDITOR"] = f'"{entrypoint}" --rebase-seq-editor "{f.name}"'
             if original_seq_editor:
                 # This should either launch the user editor or any other stuff
