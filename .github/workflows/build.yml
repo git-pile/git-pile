@@ -96,8 +96,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install dependencies
+        run: pip install --upgrade pip setuptools wheel
+
       - name: Install git-pile
-        run: python3 -m pip install --user --no-use-pep517 --editable .[tests]
+        run: python3 -m pip install --user -e .[tests]
 
       - name: Enable coverage
         if: ${{ matrix.python-version == '3.10' }}
