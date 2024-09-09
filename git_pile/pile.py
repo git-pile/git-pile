@@ -168,7 +168,7 @@ class PilePatch:
         self.__reader = reader
 
     def sha1(self):
-        return self.__reader.sha1(self.name)
+        return self.__reader.sha1(*pathlib.Path(self.name).parts)
 
 
 class PileError(Exception):
