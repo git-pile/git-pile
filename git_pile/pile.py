@@ -37,7 +37,7 @@ class Pile:
     Class responsible for representing the pile tree.
     """
 
-    def __init__(self, *, rev=None, path=None, baseline=None):
+    def __init__(self, *, rev=None, path=None, baseline=None, rev_repo_path=None):
         """
         Initialize the object from either a revision or a path in the file system.
 
@@ -54,6 +54,10 @@ class Pile:
         The keyword ``baseline`` can be used to provide an alternative baseline
         to be used. If not ``None``, it causes ``self.baseline()`` to always
         return the passed value.
+
+        If ``rev`` belongs to a git repository that does not track the the
+        current directory, the keyword ``rev_repo_path`` can be passed to
+        indicate a directory to change into before issuing git commands.
         """
         if rev and path:
             raise Exception("parameters path and rev are mutually exclusive")
@@ -63,7 +67,7 @@ class Pile:
 
         self.__rev = rev
         self.__path = path
-        self.__reader = _RevReader(rev) if rev else _PathReader(path)
+        self.__reader = _RevReader(rev, rev_repo_path) if rev else _PathReader(path)
         self.__config = None
         self.__baseline_override = baseline
 
@@ -265,8 +269,9 @@ class _PathReader(_FileReader):
 
 
 class _RevReader(_FileReader):
-    def __init__(self, rev):
+    def __init__(self, rev, repo_path):
         self.__rev = rev
+        self.__repo_path = repo_path
         # Leverage git revisions immutability to cache the result of ls-tree.
         # This is specially useful when __ls_path() is called multiple times for
         # different direct children of a very broad tree (e.g. a pile directory
@@ -288,11 +293,17 @@ class _RevReader(_FileReader):
         self.__ls_path(path)
         gitpath = "/".join(path)
         revspec = f"{self.__rev}:{gitpath}"
-        return git(["show", revspec]).stdout
+        return self.__git(["show", revspec]).stdout
 
     def sha1(self, *path):
         _, _, sha1 = self.__ls_path(path)
         return sha1
+
+    def __git(self, *cmd, **kw):
+        if self.__repo_path:
+            kw["cwd"] = self.__repo_path
+
+        return git(*cmd, **kw)
 
     def __ls_path(self, path, fmt=""):
         if len(path) == 1:
@@ -322,7 +333,7 @@ class _RevReader(_FileReader):
             cmd.append(gitpath)
 
         info = collections.OrderedDict()
-        for entry in git(cmd).stdout.rstrip("\x00").split("\x00"):
+        for entry in self.__git(cmd).stdout.rstrip("\x00").split("\x00"):
             _, objecttype, sha1, name = entry.split(maxsplit=3)
             info[name] = name, objecttype, sha1
 
