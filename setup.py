@@ -41,7 +41,10 @@ setup(
     include_package_data=True,
     maintainer_email="lucas.demarchi@intel.com",
     license="LGPLv2+",
-    scripts=["git-pile"],
+    scripts=[
+        "git-pile",
+        "git-merge-range",
+    ],
     classifiers=[
         "Intended Audience :: Developers",
         "License :: OSI Approved",
@@ -50,7 +53,10 @@ setup(
         "Operating System :: POSIX",
         "Operating System :: Unix",
     ],
-    packages=["git_pile"],
+    packages=[
+        "git_pile",
+        "git_merge_range",
+    ],
     package_data={
         "git_pile": [
             op.join("data", "git-cover-order.txt"),
