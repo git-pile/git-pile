@@ -15,6 +15,16 @@ Manage a pile of patches on top of a git branch
 
 ## Quickstart
 
+### Installing git-pile
+
+git-pile can be installed with pipx:
+
+```bash
+$ pipx install git-pile
+$ git-pile -h
+```
+
+
 ### Running git-pile
 
 git-pile follows the git naming convention for binaries so we can use it as a
