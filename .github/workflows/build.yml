@@ -113,36 +113,28 @@ jobs:
           bats --tap -T test | tee -a git.tap
 
       - name: Run tests (git v2.20.x)
+        shell: bash
         run: |
-          TEST_GIT_VERSION="v2.20"
-          export PATH=/usr/local/git-${TEST_GIT_VERSION}.x/bin:$PATH
-          git --version
-          echo "TAP version 13\r" > git-${TEST_GIT_VERSION}.tap
-          bats --tap -T test | tee -a git-${TEST_GIT_VERSION}.tap
+          . .github/test_with_git.sh
+          run v2.20
 
       - name: Run tests (git v2.25.x)
+        shell: bash
         run: |
-          TEST_GIT_VERSION="v2.25"
-          export PATH=/usr/local/git-${TEST_GIT_VERSION}.x/bin:$PATH
-          git --version
-          echo "TAP version 13\r" > git-${TEST_GIT_VERSION}.tap
-          bats --tap -T test | tee -a git-${TEST_GIT_VERSION}.tap
+          . .github/test_with_git.sh
+          run v2.25
 
       - name: Run tests (git v2.39.x)
+        shell: bash
         run: |
-          TEST_GIT_VERSION="v2.39"
-          export PATH=/usr/local/git-${TEST_GIT_VERSION}.x/bin:$PATH
-          git --version
-          echo "TAP version 13\r" > git-${TEST_GIT_VERSION}.tap
-          bats --tap -T test | tee -a git-${TEST_GIT_VERSION}.tap
+          . .github/test_with_git.sh
+          run v2.39
 
       - name: Run tests (git v2.49.x)
+        shell: bash
         run: |
-          TEST_GIT_VERSION="v2.49"
-          export PATH=/usr/local/git-${TEST_GIT_VERSION}.x/bin:$PATH
-          git --version
-          echo "TAP version 13\r" > git-${TEST_GIT_VERSION}.tap
-          bats --tap -T test | tee -a git-${TEST_GIT_VERSION}.tap
+          . .github/test_with_git.sh
+          run v2.49
 
       - name: Generate test summary
         uses: test-summary/action@v2
