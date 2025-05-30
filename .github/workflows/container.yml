@@ -1,16 +1,12 @@
 name: builder-container
 
 on:
-  push:
-    branches: [ ci, master ]
-    path:
-      - '.github/workflows/container.yml'
-      - '.github/Dockerfile.ubuntu-22.04'
   workflow_dispatch:
     inputs:
       git-ref:
         description: Git Ref (Optional)
         required: false
+  workflow_call:
 
 env:
   REGISTRY: ghcr.io
@@ -34,6 +30,7 @@ jobs:
           VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
           [ "$VERSION" == "master" ] && TAG=latest
           [ "$VERSION" == "ci" ] && TAG=test
+          [ "$VERSION" == "merge" ] && TAG=test
           docker build .github/ --file .github/Dockerfile.ubuntu-22.04 --tag $IMAGE_ID:$TAG --label "runnumber=${GITHUB_RUN_ID}"
           echo "image=$IMAGE_ID:$TAG" >> $GITHUB_OUTPUT
 

@@ -7,6 +7,46 @@ on:
     branches: [ ci, master ]
 
 jobs:
+  container_check:
+    runs-on: ubuntu-22.04
+    outputs:
+      tag: ${{ steps.tag.outputs.tag}}
+      changed: ${{ steps.check_changes.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for changes in container recipe
+        id: check_changes
+        run: |
+          if [[ "${{ github.event_name }}" = "pull_request" ]]; then
+              BASE=HEAD^
+          else
+              BASE="${{ github.event.before }}"
+              git fetch origin "$BASE"
+          fi
+          if [[ $(git diff --name-only $BASE HEAD | grep -c 'Dockerfile\|container.yml') -gt 0 ]]; then
+              echo "changed=true" >> $GITHUB_OUTPUT
+          else
+              echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Container name
+        id: tag
+        run: |
+          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+          [ "$VERSION" == "master" ] && tag=latest
+          [ "$VERSION" == "ci" ] && tag=test
+          [ "$VERSION" == "merge" ] && tag=test
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+          echo "$tag"
+
+  container_build:
+    needs: container_check
+    if: ${{ needs.container_check.outputs.changed == 'true' }}
+    uses: ./.github/workflows/container.yml
+
   build:
     runs-on: ubuntu-22.04
     strategy:
@@ -68,8 +108,9 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-22.04
+    needs: [container_check, container_build]
     container:
-      image: ghcr.io/git-pile/builder:latest
+      image: ghcr.io/git-pile/builder:${{needs.container_check.outputs.tag}}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.github_token }}
