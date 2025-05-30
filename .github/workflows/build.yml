@@ -128,17 +128,17 @@ jobs:
           echo "TAP version 13\r" > git-${TEST_GIT_VERSION}.tap
           bats --tap -T test | tee -a git-${TEST_GIT_VERSION}.tap
 
-      - name: Run tests (git v2.38.x)
+      - name: Run tests (git v2.39.x)
         run: |
-          TEST_GIT_VERSION="v2.38"
+          TEST_GIT_VERSION="v2.39"
           export PATH=/usr/local/git-${TEST_GIT_VERSION}.x/bin:$PATH
           git --version
           echo "TAP version 13\r" > git-${TEST_GIT_VERSION}.tap
           bats --tap -T test | tee -a git-${TEST_GIT_VERSION}.tap
 
-      - name: Run tests (git v2.39.x)
+      - name: Run tests (git v2.49.x)
         run: |
-          TEST_GIT_VERSION="v2.39"
+          TEST_GIT_VERSION="v2.49"
           export PATH=/usr/local/git-${TEST_GIT_VERSION}.x/bin:$PATH
           git --version
           echo "TAP version 13\r" > git-${TEST_GIT_VERSION}.tap
