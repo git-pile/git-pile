@@ -169,6 +169,12 @@ jobs:
           name: coverage-html
           path: htmlcov/
 
+      - name: Upload tests
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: tests-tap-python-${{ matrix.python-version }}
+          path: "*.tap"
+
       - name: Fail on any test failing
         if: always()
         run: |
