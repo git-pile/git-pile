@@ -8,7 +8,7 @@ on:
 
 jobs:
   container_check:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.tag.outputs.tag}}
       changed: ${{ steps.check_changes.outputs.changed }}
@@ -48,10 +48,10 @@ jobs:
     uses: ./.github/workflows/container.yml
 
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
-        python-version: [ '3.7', '3.9', '3.10', '3.12' ]
+        python-version: [ '3.9', '3.10', '3.12', '3.13' ]
 
     steps:
       - uses: actions/checkout@v4
@@ -107,7 +107,7 @@ jobs:
           git pile --version
 
   integration-tests:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: [container_check, container_build]
     container:
       image: ghcr.io/git-pile/builder:${{needs.container_check.outputs.tag}}
@@ -116,7 +116,7 @@ jobs:
         password: ${{ secrets.github_token }}
     strategy:
       matrix:
-        python-version: [ '3.7', '3.9', '3.10', '3.12' ]
+        python-version: [ '3.9', '3.10', '3.12', '3.13' ]
     steps:
       - uses: actions/checkout@v4
 

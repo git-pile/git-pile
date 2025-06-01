@@ -10,7 +10,7 @@ env:
 
 jobs:
   build-and-push-image:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -34,7 +34,7 @@ jobs:
         run: |
           TAG="${{ steps.tag_name.outputs.TAG }}"
           IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME
-          docker build .github/ --file .github/Dockerfile.ubuntu-22.04 --tag $IMAGE_ID:$TAG --label "runnumber=${GITHUB_RUN_ID}"
+          docker build .github/ --file .github/Dockerfile.ubuntu-24.04 --tag $IMAGE_ID:$TAG --label "runnumber=${GITHUB_RUN_ID}"
           echo "image=$IMAGE_ID:$TAG" >> $GITHUB_OUTPUT
 
       - name: Log in to the Container registry
