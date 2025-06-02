@@ -5,7 +5,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y \
         git python3 python3-pip \
         build-essential libssl-dev zlib1g-dev libcurl4-openssl-dev libexpat-dev gettext coreutils sudo
-RUN echo -e "[global]\nbreak-system-packages = true" >> /etc/pip.conf
+RUN printf "[global]\nbreak-system-packages = true" >> /etc/pip.conf
 RUN pip install flake8
 
 # 2.49.x: Latest / Rolling Releases / Latest Fedora

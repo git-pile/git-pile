@@ -137,9 +137,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: pip install --upgrade pip setuptools wheel
-
       - name: Install git-pile
         run: python3 -m pip install --user -e .[tests]
 
