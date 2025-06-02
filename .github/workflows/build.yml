@@ -7,11 +7,51 @@ on:
     branches: [ ci, master ]
 
 jobs:
+  container_check:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.tag.outputs.tag}}
+      changed: ${{ steps.check_changes.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for changes in container recipe
+        id: check_changes
+        run: |
+          if [[ "${{ github.event_name }}" = "pull_request" ]]; then
+              BASE=HEAD^
+          else
+              BASE="${{ github.event.before }}"
+              git fetch origin "$BASE"
+          fi
+          if [[ $(git diff --name-only $BASE HEAD | grep -c 'Dockerfile\|container.yml') -gt 0 ]]; then
+              echo "changed=true" >> $GITHUB_OUTPUT
+          else
+              echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Container name
+        id: tag
+        run: |
+          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+          [ "$VERSION" == "master" ] && tag=latest
+          [ "$VERSION" == "ci" ] && tag=test
+          [ "$VERSION" == "merge" ] && tag=test
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+          echo "$tag"
+
+  container_build:
+    needs: container_check
+    if: ${{ needs.container_check.outputs.changed == 'true' }}
+    uses: ./.github/workflows/container.yml
+
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
-        python-version: [ '3.7', '3.9', '3.10', '3.12' ]
+        python-version: [ '3.9', '3.10', '3.12', '3.13' ]
 
     steps:
       - uses: actions/checkout@v4
@@ -67,15 +107,16 @@ jobs:
           git pile --version
 
   integration-tests:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
+    needs: [container_check, container_build]
     container:
-      image: ghcr.io/git-pile/builder:latest
+      image: ghcr.io/git-pile/builder:${{needs.container_check.outputs.tag}}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.github_token }}
     strategy:
       matrix:
-        python-version: [ '3.7', '3.9', '3.10', '3.12' ]
+        python-version: [ '3.9', '3.10', '3.12', '3.13' ]
     steps:
       - uses: actions/checkout@v4
 
@@ -96,9 +137,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: pip install --upgrade pip setuptools wheel
-
       - name: Install git-pile
         run: python3 -m pip install --user -e .[tests]
 
@@ -113,36 +151,28 @@ jobs:
           bats --tap -T test | tee -a git.tap
 
       - name: Run tests (git v2.20.x)
+        shell: bash
         run: |
-          TEST_GIT_VERSION="v2.20"
-          export PATH=/usr/local/git-${TEST_GIT_VERSION}.x/bin:$PATH
-          git --version
-          echo "TAP version 13\r" > git-${TEST_GIT_VERSION}.tap
-          bats --tap -T test | tee -a git-${TEST_GIT_VERSION}.tap
+          . .github/test_with_git.sh
+          run v2.20
 
       - name: Run tests (git v2.25.x)
+        shell: bash
         run: |
-          TEST_GIT_VERSION="v2.25"
-          export PATH=/usr/local/git-${TEST_GIT_VERSION}.x/bin:$PATH
-          git --version
-          echo "TAP version 13\r" > git-${TEST_GIT_VERSION}.tap
-          bats --tap -T test | tee -a git-${TEST_GIT_VERSION}.tap
-
-      - name: Run tests (git v2.38.x)
-        run: |
-          TEST_GIT_VERSION="v2.38"
-          export PATH=/usr/local/git-${TEST_GIT_VERSION}.x/bin:$PATH
-          git --version
-          echo "TAP version 13\r" > git-${TEST_GIT_VERSION}.tap
-          bats --tap -T test | tee -a git-${TEST_GIT_VERSION}.tap
+          . .github/test_with_git.sh
+          run v2.25
 
       - name: Run tests (git v2.39.x)
+        shell: bash
         run: |
-          TEST_GIT_VERSION="v2.39"
-          export PATH=/usr/local/git-${TEST_GIT_VERSION}.x/bin:$PATH
-          git --version
-          echo "TAP version 13\r" > git-${TEST_GIT_VERSION}.tap
-          bats --tap -T test | tee -a git-${TEST_GIT_VERSION}.tap
+          . .github/test_with_git.sh
+          run v2.39
+
+      - name: Run tests (git v2.49.x)
+        shell: bash
+        run: |
+          . .github/test_with_git.sh
+          run v2.49
 
       - name: Generate test summary
         uses: test-summary/action@v2
@@ -164,10 +194,16 @@ jobs:
 
       - name: Upload coverage
         if: ${{ matrix.python-version == '3.10' }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: coverage-html
           path: htmlcov/
+
+      - name: Upload tests
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: tests-tap-python-${{ matrix.python-version }}
+          path: "*.tap"
 
       - name: Fail on any test failing
         if: always()

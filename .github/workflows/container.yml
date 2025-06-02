@@ -1,16 +1,8 @@
 name: builder-container
 
 on:
-  push:
-    branches: [ ci, master ]
-    path:
-      - '.github/workflows/container.yml'
-      - '.github/Dockerfile.ubuntu-22.04'
   workflow_dispatch:
-    inputs:
-      git-ref:
-        description: Git Ref (Optional)
-        required: false
+  workflow_call:
 
 env:
   REGISTRY: ghcr.io
@@ -18,23 +10,31 @@ env:
 
 jobs:
   build-and-push-image:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Build image
-        id: build
+      - name: Tag name
+        id: tag_name
         run: |
-          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME
           # Strip git ref prefix from version
           VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
           [ "$VERSION" == "master" ] && TAG=latest
           [ "$VERSION" == "ci" ] && TAG=test
-          docker build .github/ --file .github/Dockerfile.ubuntu-22.04 --tag $IMAGE_ID:$TAG --label "runnumber=${GITHUB_RUN_ID}"
+          [ "$VERSION" == "merge" ] && TAG=test
+
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build image
+        id: build
+        run: |
+          TAG="${{ steps.tag_name.outputs.TAG }}"
+          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME
+          docker build .github/ --file .github/Dockerfile.ubuntu-24.04 --tag $IMAGE_ID:$TAG --label "runnumber=${GITHUB_RUN_ID}"
           echo "image=$IMAGE_ID:$TAG" >> $GITHUB_OUTPUT
 
       - name: Log in to the Container registry
