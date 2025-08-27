@@ -102,12 +102,12 @@ def git_temporary_worktree(commit, dir, prefix="git-pile-worktree"):
     class Break(Exception):
         """Break out of the with statement"""
 
-    try:
-        with tempfile.TemporaryDirectory(dir=dir, prefix=prefix) as d:
+    with tempfile.TemporaryDirectory(dir=dir, prefix=prefix) as d:
+        try:
             git(f"worktree add --detach --checkout {d} {commit}", stdout=nul_f, stderr=nul_f)
             yield d
-    finally:
-        git(f"worktree remove {d}")
+        finally:
+            git(f"worktree remove --force {d}")
 
 
 def git_worktree_config_extension_enabled():

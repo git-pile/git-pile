@@ -11,7 +11,7 @@ import subprocess
 import sys
 import tempfile
 import timeit
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from time import strftime
 
 from . import __version__
@@ -1035,8 +1035,14 @@ class AmCmd(PileCommand):
             "first reset the pile branch to the commit saved in the cover "
             "letter before proceeding - this allows to replicate the "
             "exact same tree as the one that generated the cover. However "
-            "the PILE_BRANCH will have diverged.",
-            choices=["top", "pile-commit"],
+            'the PILE_BRANCH will have diverged. "merge-range" uses a complex sequence '
+            "of operations that is most likely to produce less (or none) conflicts "
+            'when compared with the "top" strategy: it uses git-merge-range '
+            "using the current result branch as *current* range, the result "
+            "branch from the pile-commit saved in the cover letter as *base* "
+            "range, and the result branch after applying the cover letter to the "
+            "saved pile commit as the *other* range.",
+            choices=["top", "pile-commit", "merge-range"],
             default="top",
         )
         self.parser.add_argument("--no-fuzzy", action="store_false", dest="fuzzy", default=None)
@@ -1051,6 +1057,14 @@ class AmCmd(PileCommand):
             default=None,
         )
 
+        # This option is only to be used by the merge-range strategy as the last
+        # commit of the interactive rebase.
+        self.parser.add_argument(
+            "--finish-merge-range",
+            nargs="+",
+            help=argparse.SUPPRESS,
+        )
+
     def run(self):
         args = self.args
         config = self.config
@@ -1058,6 +1072,12 @@ class AmCmd(PileCommand):
             return 1
 
         patchesdir = op.join(config.root, config.dir)
+
+        if args.finish_merge_range:
+            # This is the tail of run_merge_range_strategy(), which is needed as
+            # a second invocation to git-pile because it is done at the end of a
+            # git rebase operation.
+            return self.finish_merge_range_strategy(patchesdir)
 
         cover = PileCover.parse(args.mbox_cover)
         if not cover:
@@ -1067,6 +1087,15 @@ class AmCmd(PileCommand):
         # Check if stdout is tty to decide if we want to re-open stdin
         if not sys.stdin.isatty() and sys.stdout.isatty():
             sys.stdin = open("/dev/tty")
+
+        if args.strategy == "merge-range":
+            return self.run_merge_range_strategy(patchesdir, cover)
+        else:
+            return self.run_common_strategy(patchesdir, cover)
+
+    def run_common_strategy(self, patchesdir, cover):
+        args = self.args
+        config = self.config
 
         info(f"Entering '{config.dir}' directory")
         gitdir = git_worktree_get_git_dir(patchesdir)
@@ -1080,11 +1109,7 @@ class AmCmd(PileCommand):
                     file=sys.stderr,
                 )
 
-        with subprocess.Popen(
-            ["git", "-C", patchesdir, "am", "-3", "--whitespace=nowarn"], stdin=subprocess.PIPE, universal_newlines=True
-        ) as proc:
-            cover.dump(proc.stdin)
-
+        proc = self.call_git_am(patchesdir, cover)
         if proc.returncode != 0:
             if git_am_solve_diff_hunk_conflicts(args, patchesdir):
                 info("Yay, fixed!")
@@ -1109,6 +1134,138 @@ Good luck! ¯\_(ツ)_/¯"""
             return self.cli.run(genbranch_args)
 
         return 0
+
+    def run_merge_range_strategy(self, patchesdir, cover):
+        # The merge-range strategy aims at merging the changes introduced in the
+        # cover letter with development that took place in the pile since the
+        # creation of the cover.
+        #
+        # In a first phase, we rebuild what would be the revision ranges
+        # involved in the creation of the pile cover letter: the "base revision"
+        # as the range between the baseline and the result branch prior to the
+        # change represented by the cover; the "other branch" as the range
+        # between the baseline and the result branch after the change.
+        #
+        # This first part is expected not to fail, because (i) patches already
+        # committed in the pile are expected to genbranch cleanly and (ii) since
+        # we are using the same base used to generate the cover, application of
+        # the cover letter and a subsequent genbranch is also expected to
+        # succeed. As such, we abort on any failure here.
+        #
+        # The next phase is to use git-merge-range to generate a new result
+        # branch containing the changes from the cover letter merged with the
+        # current state of the repository. As such, git-merge-range is invoked
+        # to merge the "other range" into the "current range" using "base range"
+        # as base, where "current range" is the revision range between the
+        # current baseline and result branch. This involves an interactive
+        # rebase and there might be user interaction needed to solve eventual
+        # conflicts.
+        #
+        # As final part of the interactive rebase, we include commands to
+        # finally run genbranches and commit to the pile.
+        original_head = git("branch --show-current").stdout.strip()
+        if not original_head:
+            original_head = git("rev-parse HEAD").stdout.strip()
+
+        config = self.config
+        head = git("rev-parse HEAD").stdout.strip()
+        cur_baseline = Pile(path=patchesdir).baseline()
+        cur_range = f"{cur_baseline}..{head}"
+
+        with ExitStack() as exit_stack:
+            exit_stack.callback(os.chdir, os.getcwd())
+            branch_dir = exit_stack.enter_context(git_temporary_worktree(config.result_branch, config.root))
+            pile_dir = exit_stack.enter_context(git_temporary_worktree(cover.pile_commit, config.root))
+
+            base_baseline = Pile(path=pile_dir).baseline()
+            print("Applying cover to the original pile commit")
+            proc = self.call_git_am(pile_dir, cover)
+            if proc.returncode != 0:
+                fatal("Failed to apply")
+            other_baseline = Pile(path=pile_dir).baseline()
+            pile_am_commit = git(["-C", pile_dir, "rev-parse", "HEAD"]).stdout.strip()
+
+            if base_baseline != other_baseline and base_baseline != cur_baseline and other_baseline != cur_baseline:
+                # TODO: Add an option for the user to select which baseline to use
+                fatal("Baseline is changed by both patch and current pile")
+            elif base_baseline != other_baseline:
+                merge_range_onto = other_baseline
+            else:
+                merge_range_onto = cur_baseline
+
+            os.chdir(branch_dir)
+            print("Re-building base range")
+            genbranch_args = parse_args(self.cli, ["genbranch", "-i", "--pile-rev", cover.pile_commit])
+            genbranch(config, genbranch_args)
+            head = git("rev-parse HEAD").stdout.strip()
+            base_range = f"{base_baseline}..{head}"
+
+            print("Re-building other range")
+            genbranch_args = parse_args(self.cli, ["genbranch", "-i", "--external-pile", pile_dir])
+            genbranch(config, genbranch_args)
+            head = git("rev-parse HEAD").stdout.strip()
+            other_range = f"{other_baseline}..{head}"
+
+            print()
+            print(f"Current range is {cur_range}")
+            print(f"Base range is {base_range}")
+            print(f"Other range is {other_range}")
+
+        # Let's do the rebase in the current workdir, as we want the user to be
+        # able to solve conflicts. The --finish-merge-range operation takes care
+        # of restoring to the original head.
+        cmd = (
+            "git",
+            "merge-range",
+            "--onto",
+            merge_range_onto,
+            cur_range,
+            base_range,
+            other_range,
+            "--todo-append",
+            f"exec '{sys.argv[0]}' am --finish-merge-range '{cur_range}' '{original_head}' '{merge_range_onto}' '{pile_am_commit}'",
+        )
+        os.execvp(cmd[0], cmd)
+
+    def finish_merge_range_strategy(self, patchesdir):
+        cur_range, original_head, merge_range_onto, pile_am_commit = self.args.finish_merge_range
+
+        # We need to unset these variables (inherited from the rebase
+        # operation), because they confuse git commands that are run under
+        # patchesdir (e.g. git-add ends up staging the files in the current
+        # wordir instead of patchesdir) .
+        saved_git_dir = os.environ.pop("GIT_DIR", None)
+        saved_git_cherry_pick_help = os.environ.pop("GIT_CHERRY_PICK_HELP", None)
+
+        with tempfile.TemporaryDirectory() as d:
+            format_patch_args = parse_args(
+                self.cli,
+                ["format-patch", "-o", d, "--no-full-patch", "-C", pile_am_commit, cur_range, f"{merge_range_onto}..HEAD"],
+            )
+            self.cli.run(format_patch_args)
+            cover = PileCover.parse(op.join(d, "0000-cover-letter.patch"))
+
+        self.call_git_am(patchesdir, cover)
+
+        if saved_git_dir is not None:
+            os.environ["GIT_DIR"] = saved_git_dir
+
+        if saved_git_cherry_pick_help is not None:
+            os.environ["GIT_CHERRY_PICK_HELP"] = saved_git_cherry_pick_help
+
+        # Restore to the respository head prior to calling git pile am.
+        git(["checkout", original_head], stderr=None)
+        print()
+        print("Pile merge-range strategy finished successfully!")
+
+        return 0
+
+    def call_git_am(self, patchesdir, cover):
+        with subprocess.Popen(
+            ["git", "-C", patchesdir, "am", "-3", "--whitespace=nowarn"], stdin=subprocess.PIPE, universal_newlines=True
+        ) as proc:
+            cover.dump(proc.stdin)
+        return proc
 
 
 def check_baseline_is_ancestor(baseline, ref):
