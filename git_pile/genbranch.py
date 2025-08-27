@@ -121,7 +121,7 @@ def genbranch_with_exit_stack(config, args, exit_stack):
                 pass
 
         if cache_pile_rev:
-            pile_for_cache = Pile(rev=cache_pile_rev, baseline=args.baseline)
+            pile_for_cache = Pile(rev=cache_pile_rev, rev_repo_path=patchesdir, baseline=args.baseline)
 
         effective_baseline, patchlist_offset = cache.search_best_base(pile_for_cache)
         if patchlist_offset:
